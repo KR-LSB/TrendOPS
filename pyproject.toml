@@ -1,0 +1,65 @@
+[tool.poetry]
+name = "trendops"
+version = "0.1.0"
+description = "Real-time trend analysis and SNS automation pipeline"
+authors = ["Your Name <your@email.com>"]
+readme = "README.md"
+packages = [{include = "trendops", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+# === Core ===
+pydantic = "^2.0"
+pydantic-settings = "^2.0"
+fastapi = "^0.109"
+uvicorn = "^0.27"
+
+# === Data Collection ===
+pytrends = "^4.9"
+feedparser = "^6.0"
+playwright = "^1.41"
+aiohttp = "^3.9"
+
+# === AI/ML ===
+openai = "^1.12"
+sentence-transformers = "^2.3"
+chromadb = "^0.4"
+
+# === Data Processing ===
+numpy = "^1.26"
+
+# === Infrastructure ===
+redis = "^5.0"
+apscheduler = "^3.10"
+
+# === Monitoring ===
+prometheus-client = "^0.19"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.2"
+mypy = "^1.8"
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+pre-commit = "^3.6"
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "I", "W", "UP"]
+ignore = ["E501"]
+
+[tool.ruff.isort]
+known-first-party = ["trendops"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
