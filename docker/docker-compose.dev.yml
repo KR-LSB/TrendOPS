@@ -1,5 +1,4 @@
 version: '3.8'
-
 services:
   redis:
     image: redis:7-alpine
@@ -8,10 +7,6 @@ services:
     volumes:
       - redis_data:/data
     command: redis-server --appendonly yes
-
-  # Week 2 이후 추가 예정
-  # chromadb:
-  # postgres:
 
 volumes:
   redis_data:

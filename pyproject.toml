@@ -25,6 +25,8 @@ aiohttp = "^3.9"
 openai = "^1.12"
 sentence-transformers = "^2.3"
 chromadb = "^0.4"
+outlines = "^0.1"              # Structured Generation (JSON 100% 보장)
+ollama = "^0.4"                # Ollama Python Client
 
 # === Data Processing ===
 numpy = "^1.26"
@@ -63,3 +65,7 @@ testpaths = ["tests"]
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+# === BM25 Search (Week 3) ===
+rank-bm25 = "^0.2"
+konlpy = "^0.6"
