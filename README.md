@@ -13,7 +13,7 @@
 
 ## 🏗️ System Architecture
 
-```mermaind
+```mermaid
 graph TD
     %% 스타일 정의
     classDef trigger fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
@@ -40,7 +40,6 @@ graph TD
 
     subgraph "Stage 4: Analysis (The Brain)"
         Chroma -->|Hybrid Search| RAG[RAG Context Injection]
-        %% 👇 [수정됨] 텍스트에 괄호()가 있을 땐 따옴표 ""로 감싸야 합니다!
         RAG -->|Prompting| LLM["Local LLM (Ollama)"]:::brain
         LLM -->|Draft| Guard[AI Guardrail]:::brain
         Guard -->|Self-Correction| LLM
