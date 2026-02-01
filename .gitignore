@@ -33,3 +33,10 @@ htmlcov/
 
 # Docker
 .docker/data/
+
+data/*
+!data/.gitkeep
+reports/*
+logs/*
+*.sqlite3
+*.bin
