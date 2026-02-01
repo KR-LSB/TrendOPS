@@ -13,7 +13,43 @@
 
 ## 🏗️ System Architecture
 
+```mermaind
+graph TD
+    %% 스타일 정의
+    classDef trigger fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef collector fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef storage fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px;
+    classDef brain fill:#f3e5f5,stroke:#4a148c,stroke-width:2px;
+    classDef output fill:#fff,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5;
 
+    subgraph "Stage 1: Trigger"
+        GT[Google Trends API]:::trigger -->|급상승 키워드 감지| Scheduler(Job Scheduler)
+    end
+
+    subgraph "Stage 2: ETL & Collection"
+        Scheduler -->|Async Task| RSS[News Collector]:::collector
+        Scheduler -->|Playwright| YT[YouTube Collector]:::collector
+        RSS -->|기사 본문| Dedup{Redis Deduplication}
+        YT -->|댓글 여론| Dedup
+    end
+
+    subgraph "Stage 3: Knowledge Base"
+        Dedup -->|New Data| Embedding[Sentence Transformer]
+        Embedding -->|Vectorization| Chroma[ChromaDB Vector Store]:::storage
+    end
+
+    subgraph "Stage 4: Analysis (The Brain)"
+        Chroma -->|Hybrid Search| RAG[RAG Context Injection]
+        %% 👇 [수정됨] 텍스트에 괄호()가 있을 땐 따옴표 ""로 감싸야 합니다!
+        RAG -->|Prompting| LLM["Local LLM (Ollama)"]:::brain
+        LLM -->|Draft| Guard[AI Guardrail]:::brain
+        Guard -->|Self-Correction| LLM
+    end
+
+    subgraph "Stage 5: Publishing"
+        Guard -->|Final Review| Report["Daily Report .md"]:::output
+    end
+```
 
 이 프로젝트는 **ETL(Extract, Transform, Load)** 파이프라인과 **LLM Ops**가 결합된 구조를 가집니다.
 
@@ -74,21 +110,24 @@ LLM이 생성한 결과가 JSON 형식을 위배하거나 내용이 부실할 �
 # Repository Clone
 git clone [https://github.com/KR-LSB/trendops.git](https://github.com/KR-LSB/trendops.git)
 cd trendops
+```
 2. Configuration (Optional)
 docker-compose.yml에서 Ollama 호스트 주소 등을 환경에 맞게 수정할 수 있습니다.
 
 3. Execution
 백그라운드 모드로 서비스를 실행합니다. (초기 실행 시 Docker 이미지를 빌드합니다.)
 
-Bash
+```Bash
 docker-compose up -d --build
+```
 4. Check Logs
 파이프라인이 정상적으로 작동하는지 로그를 통해 확인합니다.
 
-Bash
+```Bash
 docker-compose logs -f trendops
+```
 📂 Project Structure
-Bash
+```Bash
 trendops/
 ├── data/                 # ChromaDB 및 생성된 리포트 저장소 (Volume)
 ├── scripts/              # 실행 스크립트
@@ -105,6 +144,7 @@ trendops/
 ├── docker-compose.yml    # 컨테이너 오케스트레이션 설정
 ├── Dockerfile            # 이미지 빌드 명세서
 └── requirements.txt      # 의존성 목록
+```
 🧪 Performance & Results
 수집 속도: Asyncio 비동기 처리를 도입하여 동기 방식 대비 3배 이상 속도 개선
 
