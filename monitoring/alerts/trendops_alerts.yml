@@ -1,0 +1,195 @@
+# TrendOps Alert Rules
+# Week 6 Day 3: Grafana Dashboard Configuration
+
+groups:
+  - name: trendops_pipeline_alerts
+    rules:
+      # 파이프라인 에러율 경고
+      - alert: HighPipelineErrorRate
+        expr: |
+          (
+            sum(rate(trendops_errors_total[5m])) /
+            sum(rate(trendops_trigger_total[5m]) + rate(trendops_collect_total[5m]) + 
+                rate(trendops_analyze_total[5m]) + rate(trendops_publish_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High pipeline error rate"
+          description: "Pipeline error rate is above 10% for the last 5 minutes"
+
+      # Trigger 스테이지 실패
+      - alert: TriggerStageFailing
+        expr: |
+          (sum(rate(trendops_trigger_success_total[15m])) / sum(rate(trendops_trigger_total[15m]))) < 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Trigger stage success rate below 90%"
+          description: "Trigger operations are failing more than expected"
+
+      # Collect 스테이지 실패
+      - alert: CollectStageFailing
+        expr: |
+          (sum(rate(trendops_collect_success_total[15m])) / sum(rate(trendops_collect_total[15m]))) < 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Collect stage success rate below 90%"
+          description: "Collection operations are failing more than expected"
+
+      # Analyze 스테이지 실패
+      - alert: AnalyzeStageFailing
+        expr: |
+          (sum(rate(trendops_analyze_success_total[15m])) / sum(rate(trendops_analyze_total[15m]))) < 0.85
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Analyze stage success rate below 85%"
+          description: "Analysis operations are failing more than expected"
+
+      # 파이프라인 완전 중단
+      - alert: PipelineStalled
+        expr: |
+          sum(rate(trendops_trigger_total[30m])) == 0
+        for: 30m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Pipeline has stalled"
+          description: "No trigger operations in the last 30 minutes"
+
+  - name: trendops_latency_alerts
+    rules:
+      # LLM 추론 지연
+      - alert: HighLLMLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(trendops_llm_inference_duration_seconds_bucket[5m])) by (le)) > 30
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High LLM inference latency"
+          description: "P95 LLM inference latency exceeds 30 seconds"
+
+      # 전체 파이프라인 지연
+      - alert: HighPipelineLatency
+        expr: |
+          histogram_quantile(0.95, sum(rate(trendops_analyze_duration_seconds_bucket[5m])) by (le)) > 120
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High analysis pipeline latency"
+          description: "P95 analysis latency exceeds 2 minutes"
+
+  - name: trendops_resource_alerts
+    rules:
+      # GPU 메모리 임계치
+      - alert: HighGPUMemoryUsage
+        expr: trendops_vllm_gpu_memory_used_gb > 14
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High GPU memory usage"
+          description: "vLLM GPU memory usage exceeds 14GB (approaching 16GB limit)"
+
+      # GPU OOM 위험
+      - alert: GPUMemoryCritical
+        expr: trendops_vllm_gpu_memory_used_gb > 15
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical GPU memory usage - OOM imminent"
+          description: "GPU memory usage exceeds 15GB, OOM crash likely"
+
+      # Redis 메모리 임계치
+      - alert: HighRedisMemoryUsage
+        expr: trendops_redis_memory_usage_percent > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Redis memory usage"
+          description: "Redis memory usage exceeds 80%"
+
+      # Redis 메모리 위험
+      - alert: RedisMemoryCritical
+        expr: trendops_redis_memory_usage_percent > 95
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Critical Redis memory usage"
+          description: "Redis memory usage exceeds 95%, eviction imminent"
+
+  - name: trendops_queue_alerts
+    rules:
+      # 큐 백로그 증가
+      - alert: HighQueueBacklog
+        expr: trendops_redis_queue_size{queue="pending"} > 100
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High pending queue backlog"
+          description: "More than 100 jobs pending for over 15 minutes"
+
+      # 실패 큐 증가
+      - alert: HighFailedJobs
+        expr: |
+          increase(trendops_redis_queue_size{queue="failed"}[1h]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High number of failed jobs"
+          description: "More than 10 jobs failed in the last hour"
+
+  - name: trendops_guardrail_alerts
+    rules:
+      # 높은 Guardrail 거부율
+      - alert: HighGuardrailRejectionRate
+        expr: |
+          (
+            sum(rate(trendops_guardrail_rejected_total[1h])) /
+            (sum(rate(trendops_guardrail_passed_total[1h])) + 
+             sum(rate(trendops_guardrail_rejected_total[1h])) +
+             sum(rate(trendops_guardrail_revised_total[1h])))
+          ) > 0.2
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High guardrail rejection rate"
+          description: "More than 20% of content is being rejected by guardrail"
+
+  - name: trendops_publishing_alerts
+    rules:
+      # 발행 실패
+      - alert: PublishingFailing
+        expr: |
+          (sum(rate(trendops_publish_success_total[1h])) / sum(rate(trendops_publish_total[1h]))) < 0.9
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Publishing success rate below 90%"
+          description: "Content publishing is failing more than expected"
+
+      # 발행 없음 (예상 시간)
+      - alert: NoPublishedContent
+        expr: |
+          increase(trendops_posts_published_total[6h]) == 0
+        for: 10m
+        labels:
+          severity: info
+        annotations:
+          summary: "No content published in 6 hours"
+          description: "No posts have been published in the last 6 hours (expected: 3/day)"

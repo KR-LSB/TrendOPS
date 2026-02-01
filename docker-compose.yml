@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # [1] TrendOps 에이전트
+  trendops:
+    build: .
+    container_name: trendops_agent
+    restart: always
+    volumes:
+      - ./data:/app/data  # DB 및 리포트 저장소
+      - ./logs:/app/logs  # 로그 저장소
+    environment:
+      - TZ=Asia/Seoul
+      # 호스트(내 컴퓨터)의 Ollama 접속 주소
+      - OLLAMA_HOST=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - redis
+
+  # [2] Redis (데이터 캐싱)
+  redis:
+    image: redis:alpine
+    container_name: trendops_redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+volumes:
+  redis_data:

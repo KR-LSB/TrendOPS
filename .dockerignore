@@ -1,0 +1,8 @@
+__pycache__
+*.pyc
+.git
+.vscode
+venv
+.env
+data/chromadb  # DB는 볼륨으로 마운트하므로 복사 제외
+output

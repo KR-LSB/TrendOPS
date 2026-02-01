@@ -80,7 +80,7 @@ class GuardrailConfig:
     strict_mode: bool = False  # True면 더 엄격한 검사
     
     # LLM 설정
-    llm_model: str = "qwen2.5:7b-instruct"
+    llm_model: str = "exaone3.5"
     llm_base_url: str = "http://localhost:11434"
     llm_temperature: float = 0.1  # 일관된 판정을 위해 낮은 temperature
     

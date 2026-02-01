@@ -3,7 +3,7 @@ import asyncio
 import random
 from datetime import datetime
 from typing import Any
-
+import feedparser
 import aiohttp
 
 from trendops.config.settings import get_settings
@@ -46,63 +46,49 @@ class GoogleTrendTrigger:
         self._settings = get_settings()
     
     async def _fetch_trending_direct(self) -> list[str]:
-        """
-        Google Trends에서 직접 트렌드 키워드 조회
-        pytrends 호환성 문제 우회
-        """
-        params = {
-            "hl": "ko",
-            "tz": "-540",
-            "geo": "KR",
-            "ns": "15",
-        }
-        
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-            "Accept": "application/json",
-        }
-        
-        timeout = aiohttp.ClientTimeout(total=30)
-        
-        try:
-            async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.get(
-                    self.TRENDS_API_URL,
-                    params=params,
-                    headers=headers,
-                ) as response:
-                    if response.status != 200:
-                        logger.warning(
-                            f"Google Trends API returned status {response.status}"
-                        )
-                        return []
-                    
-                    text = await response.text()
-                    
-                    # Google API는 ")]}'" 접두사를 붙임
-                    if text.startswith(")]}'"):
-                        text = text[5:]
-                    
-                    import json
-                    data = json.loads(text)
-                    
-                    keywords: list[str] = []
-                    
-                    # dailytrends 응답 파싱
-                    trending_days = data.get("default", {}).get("trendingSearchesDays", [])
-                    
-                    for day in trending_days:
-                        searches = day.get("trendingSearches", [])
-                        for search in searches:
-                            title = search.get("title", {}).get("query", "")
-                            if title:
-                                keywords.append(title)
-                    
-                    return keywords
-                    
-        except Exception as e:
-            logger.warning(f"Direct trends fetch failed: {e}")
-            return []
+            """
+            [수정됨] New Google Trends RSS (2025)
+            - 구형 daily/rss 주소 폐쇄로 인해 /trending/rss 로 변경
+            - 404 방지를 위해 User-Agent 헤더 필수
+            """
+            # ✅ 2025년 최신 RSS 주소 (Daily가 아닌 Trending 경로 사용)
+            rss_url = "https://trends.google.com/trending/rss?geo=KR"
+            
+            # 봇 차단 우회용 헤더 (이게 없으면 404 뜹니다)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "application/rss+xml, application/xml, text/xml",
+                "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            }
+            
+            timeout = aiohttp.ClientTimeout(total=30)
+            
+            try:
+                async with aiohttp.ClientSession(timeout=timeout) as session:
+                    async with session.get(rss_url, headers=headers) as response:
+                        if response.status != 200:
+                            logger.warning(f"RSS fetch status: {response.status}")
+                            # 429(Too Many Requests)일 경우 잠시 대기 로직이 있으면 좋음
+                            return []
+                        
+                        # XML 텍스트 가져오기
+                        xml_content = await response.text()
+                        
+                        # feedparser로 파싱
+                        feed = feedparser.parse(xml_content)
+                        
+                        keywords = []
+                        for entry in feed.entries:
+                            # RSS title에 키워드가 들어있음
+                            if entry.title:
+                                keywords.append(entry.title)
+                                
+                        logger.info(f"Fetched {len(keywords)} keywords from RSS")
+                        return keywords
+                        
+            except Exception as e:
+                logger.warning(f"RSS fetch failed: {e}")
+                return []
     
     async def _fetch_with_pytrends(self) -> list[str]:
         """

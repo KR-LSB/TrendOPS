@@ -1,0 +1,17 @@
+aiohttp
+beautifulsoup4
+feedparser
+requests
+playwright
+playwright-stealth
+chromadb
+sentence-transformers
+ollama
+openai
+rich
+schedule
+apscheduler
+jinja2
+pydantic
+pydantic-settings
+redis

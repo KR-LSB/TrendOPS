@@ -66,7 +66,7 @@ class Settings(BaseSettings):
         description="vLLM OpenAI 호환 API 엔드포인트",
     )
     vllm_model: str = Field(
-        default="qwen2.5:7b",  # Ollama 모델명
+        default="exaone3.5:latest",  # Ollama 모델명
         description="vLLM에서 서빙할 모델 이름",
     )
     vllm_max_tokens: int = Field(

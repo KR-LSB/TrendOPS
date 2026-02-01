@@ -175,7 +175,7 @@ class OutlinesOllamaBackend(GenerationBackend):
     
     def __init__(
         self,
-        model_name: str = "qwen2.5:7b-instruct",
+        model_name: str = "exaone3.5",
         base_url: str = "http://localhost:11434",
     ):
         self.model_name = model_name
@@ -184,21 +184,41 @@ class OutlinesOllamaBackend(GenerationBackend):
         self._generator_cache: dict[type, Any] = {}
     
     def _get_model(self):
-        """Outlines 모델 lazy loading"""
-        if self._model is None:
-            try:
-                from outlines import models
-                self._model = models.ollama(
-                    self.model_name,
-                    base_url=self.base_url,
-                )
-            except ImportError:
-                raise ImportError(
-                    "outlines 라이브러리가 필요합니다: pip install outlines"
-                )
-            except Exception as e:
-                raise RuntimeError(f"Ollama 모델 로드 실패: {e}")
-        return self._model
+            """Outlines 모델 lazy loading (호환성 개선 패치)"""
+            if self._model is None:
+                try:
+                    from outlines import models
+                    
+                    # 1. models.ollama가 존재하는지 확인 (최신 버전 outlines)
+                    if hasattr(models, 'ollama'):
+                        self._model = models.ollama(
+                            self.model_name,
+                            base_url=self.base_url,
+                        )
+                    # 2. 없다면 OpenAI 호환 모드로 연결 (구버전 outlines 대응)
+                    # Ollama는 http://localhost:11434/v1 에서 OpenAI API와 호환됩니다.
+                    else:
+                        # URL 끝에 /v1이 없으면 추가
+                        base_url = self.base_url.rstrip('/')
+                        if not base_url.endswith('/v1'):
+                            base_url += '/v1'
+                        
+                        self._model = models.openai(
+                            self.model_name,
+                            base_url=base_url,
+                            api_key="ollama",  # 더미 키 (Ollama는 키 검사 안함)
+                        )
+                        
+                except ImportError:
+                    raise ImportError(
+                        "outlines 라이브러리가 필요합니다: pip install outlines"
+                    )
+                except Exception as e:
+                    # 상세 에러 로깅
+                    print(f"[DEBUG] Outlines Init Error: {e}")
+                    raise RuntimeError(f"Ollama 모델 로드 실패: {e}")
+                    
+            return self._model
     
     def _get_generator(self, schema: type[T]):
         """스키마별 generator 캐싱"""
@@ -246,7 +266,7 @@ class OllamaJsonModeBackend(GenerationBackend):
     
     def __init__(
         self,
-        model_name: str = "qwen2.5:7b-instruct",
+        model_name: str = "exaone3.5",
         base_url: str = "http://localhost:11434",
         max_retries: int = 3,
     ):
@@ -357,7 +377,7 @@ class StructuredAnalyzer:
     
     def __init__(
         self,
-        model_name: str = "qwen2.5:7b-instruct",
+        model_name: str = "exaone3.5",
         base_url: str = "http://localhost:11434",
         use_outlines: bool = True,
     ):
@@ -533,7 +553,7 @@ class StructuredAnalyzer:
 async def analyze_keyword_structured(
     keyword: str,
     articles: list[dict[str, Any]],
-    model_name: str = "qwen2.5:7b-instruct",
+    model_name: str = "exaone3.5",
 ) -> AnalysisResult:
     """
     단일 키워드 분석 편의 함수

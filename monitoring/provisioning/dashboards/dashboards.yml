@@ -1,0 +1,16 @@
+# TrendOps Grafana Dashboards Provisioning
+# Week 6 Day 3: Grafana Dashboard Configuration
+apiVersion: 1
+
+providers:
+  - name: 'TrendOps Dashboards'
+    orgId: 1
+    folder: 'TrendOps'
+    folderUid: 'trendops'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: true

@@ -32,4 +32,4 @@ htmlcov/
 .mypy_cache/
 
 # Docker
-docker/data/
+.docker/data/
