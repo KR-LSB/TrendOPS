@@ -11,7 +11,6 @@ services:
       - ./logs:/app/logs  # 로그 저장소
     environment:
       - TZ=Asia/Seoul
-      # 호스트(내 컴퓨터)의 Ollama 접속 주소
       - OLLAMA_HOST=http://host.docker.internal:11434
     extra_hosts:
       - "host.docker.internal:host-gateway"
