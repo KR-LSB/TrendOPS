@@ -4,54 +4,54 @@ TrendOps FastAPI 메인 애플리케이션
 
 Week 6 Day 4: REST API 서버 구현
 """
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from trendops.api.metrics import APP_INFO, init_metrics
+from trendops.api.metrics import init_metrics
 from trendops.api.routes import analysis, health, keywords, pipeline, publications
 from trendops.api.routes.health import set_startup_time
-from trendops.database.connection import get_database
 from trendops.config.settings import get_settings
-
+from trendops.database.connection import get_database
 
 # =============================================================================
 # Lifespan Management
 # =============================================================================
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """
     애플리케이션 수명 주기 관리
-    
+
     Startup:
         - 데이터베이스 연결
         - 메트릭 초기화
         - 시작 시간 기록
-    
+
     Shutdown:
         - 데이터베이스 연결 해제
     """
     # === Startup ===
     settings = get_settings()
     db = get_database(settings)
-    
+
     try:
         await db.connect()
         print(f"✅ Database connected (env: {settings.env})")
     except Exception as e:
         print(f"⚠️ Database connection failed: {e}")
-    
+
     init_metrics()
     set_startup_time()
     print("✅ TrendOps API Server started")
-    
+
     yield
-    
+
     # === Shutdown ===
     await db.disconnect()
     print("✅ Database disconnected")
@@ -115,25 +115,25 @@ app.add_middleware(
 async def log_requests(request: Request, call_next):
     """요청 로깅 미들웨어"""
     start_time = datetime.now()
-    
+
     response = await call_next(request)
-    
+
     duration = (datetime.now() - start_time).total_seconds() * 1000
-    
+
     # 로깅 (개발 환경에서만)
     settings = get_settings()
     if settings.is_development:
         print(
-            f"{request.method} {request.url.path} "
-            f"- {response.status_code} ({duration:.1f}ms)"
+            f"{request.method} {request.url.path} " f"- {response.status_code} ({duration:.1f}ms)"
         )
-    
+
     return response
 
 
 # =============================================================================
 # Exception Handlers
 # =============================================================================
+
 
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
@@ -189,6 +189,7 @@ app.include_router(
 # Root Endpoints
 # =============================================================================
 
+
 @app.get(
     "/",
     summary="API 정보",
@@ -237,7 +238,7 @@ async def info():
 
 try:
     from prometheus_fastapi_instrumentator import Instrumentator
-    
+
     # FastAPI 자동 계측
     instrumentator = Instrumentator(
         should_group_status_codes=True,
@@ -248,10 +249,10 @@ try:
         inprogress_name="trendops_http_requests_inprogress",
         inprogress_labels=True,
     )
-    
+
     instrumentator.instrument(app).expose(app, endpoint="/metrics")
     print("✅ Prometheus metrics enabled at /metrics")
-    
+
 except ImportError:
     print("⚠️ prometheus-fastapi-instrumentator not installed, metrics disabled")
 
@@ -260,6 +261,7 @@ except ImportError:
 # CLI Entry Point
 # =============================================================================
 
+
 def run_server(
     host: str = "0.0.0.0",
     port: int = 8000,
@@ -267,12 +269,12 @@ def run_server(
 ):
     """
     서버 실행 (개발용)
-    
+
     Usage:
         python -m trendops.api.main
     """
     import uvicorn
-    
+
     uvicorn.run(
         "trendops.api.main:app",
         host=host,

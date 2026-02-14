@@ -1,7 +1,6 @@
 # scripts/run_scheduler.py
 import asyncio
 import sys
-import logging
 from datetime import datetime
 from pathlib import Path
 
@@ -28,32 +27,30 @@ from trendops.utils.logger import get_logger
 # [수정 완료] 로거 초기화
 logger = get_logger("scheduler")
 
+
 async def job_function():
     """주기적으로 실행될 작업"""
     logger.info("⏰ Scheduled Job Started: TrendOps E2E Pipeline")
     try:
         # 파이프라인 실행
-        result = await run_real_pipeline(
-            max_keywords=10,
-            max_articles=15,
-            model="exaone3.5"
-        )
-        
+        result = await run_real_pipeline(max_keywords=10, max_articles=15, model="exaone3.5")
+
         status = "SUCCESS" if result.get("success") else "FAILED"
         # total_time_seconds 키가 없으면 0으로 처리
         duration = result.get("total_time_seconds", 0)
         logger.info(f"✅ Job Finished: {status}")
-        
+
     except Exception as e:
         logger.error(f"❌ Job Execution Failed: {e}")
+
 
 async def main():
     # 스케줄러 설정
     scheduler = AsyncIOScheduler(timezone="Asia/Seoul")
-    
+
     # 실행 주기 설정 (예: 30분)
     INTERVAL_MINUTES = 30
-    
+
     # 작업 등록
     scheduler.add_job(
         job_function,
@@ -62,17 +59,17 @@ async def main():
         name="TrendOps Pipeline",
         replace_existing=True,
         # 앱 시작 시 5초 후 첫 실행
-        next_run_time=datetime.now().replace(microsecond=0) 
+        next_run_time=datetime.now().replace(microsecond=0),
     )
-    
+
     # 시작
-    print(f"\n🚀 TrendOps Automation Started")
+    print("\n🚀 TrendOps Automation Started")
     print(f"   - Interval: Every {INTERVAL_MINUTES} minutes")
-    print(f"   - Target: scripts/real_e2e_pipeline.py")
+    print("   - Target: scripts/real_e2e_pipeline.py")
     print("   - Press Ctrl+C to stop.\n")
-    
+
     scheduler.start()
-    
+
     # 무한 대기
     try:
         while True:
@@ -80,6 +77,7 @@ async def main():
     except (KeyboardInterrupt, SystemExit):
         print("\n🛑 Scheduler stopped.")
         scheduler.shutdown()
+
 
 if __name__ == "__main__":
     asyncio.run(main())

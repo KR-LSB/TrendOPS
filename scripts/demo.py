@@ -22,22 +22,20 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import random
 import sys
 from dataclasses import dataclass
-from datetime import datetime
-from typing import Any
 
 # Rich for beautiful output
 try:
     from rich.console import Console
+    from rich.layout import Layout
+    from rich.live import Live
     from rich.panel import Panel
     from rich.progress import Progress, SpinnerColumn, TextColumn
     from rich.table import Table
     from rich.text import Text
     from rich.tree import Tree
-    from rich.live import Live
-    from rich.layout import Layout
+
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
@@ -48,9 +46,11 @@ except ImportError:
 # Demo Data Models
 # =============================================================================
 
+
 @dataclass
 class DemoKeyword:
     """데모용 트렌드 키워드"""
+
     keyword: str
     score: float
     source: str = "google"
@@ -59,6 +59,7 @@ class DemoKeyword:
 @dataclass
 class DemoArticle:
     """데모용 뉴스 기사"""
+
     title: str
     source: str
     published: str
@@ -67,6 +68,7 @@ class DemoArticle:
 @dataclass
 class DemoAnalysis:
     """데모용 분석 결과"""
+
     keyword: str
     summary: str
     sentiment: dict[str, float]
@@ -76,6 +78,7 @@ class DemoAnalysis:
 @dataclass
 class DemoContent:
     """데모용 발행 콘텐츠"""
+
     keyword: str
     image_path: str
     caption: str
@@ -106,7 +109,7 @@ SAMPLE_ARTICLES = [
 SAMPLE_ANALYSIS = DemoAnalysis(
     keyword="AI 규제",
     summary="정부가 AI 규제 강화 방안을 발표할 예정이며, 국회에서는 AI 특별위원회가 출범했습니다. "
-            "글로벌 기업들은 자율 규제와 정부 규제에 대한 대응 전략을 마련하고 있습니다.",
+    "글로벌 기업들은 자율 규제와 정부 규제에 대한 대응 전략을 마련하고 있습니다.",
     sentiment={"positive": 0.35, "negative": 0.40, "neutral": 0.25},
     key_points=[
         "정부 AI 규제 강화 방안 발표 예정",
@@ -121,55 +124,62 @@ SAMPLE_ANALYSIS = DemoAnalysis(
 # Demo Stages
 # =============================================================================
 
+
 class DemoRunner:
     """데모 실행기"""
-    
+
     def __init__(self, fast: bool = False, interactive: bool = False):
         self.fast = fast
         self.interactive = interactive
         self.delay_factor = 0.2 if fast else 1.0
         self.console = Console() if RICH_AVAILABLE else None
-    
+
     async def delay(self, seconds: float):
         """지연 시간 적용"""
         await asyncio.sleep(seconds * self.delay_factor)
-    
+
     def print(self, *args, **kwargs):
         """출력"""
         if self.console:
             self.console.print(*args, **kwargs)
         else:
             print(*args)
-    
+
     def wait_for_input(self, prompt: str = "Press Enter to continue..."):
         """대화형 모드에서 사용자 입력 대기"""
         if self.interactive:
             input(f"\n{prompt}\n")
-    
+
     async def run_welcome(self):
         """환영 메시지"""
         if self.console:
-            self.print(Panel.fit(
-                "[bold cyan]TrendOps Demo[/]\n"
-                "실시간 여론 분석 및 SNS 자동화 파이프라인\n\n"
-                "[dim]• GPU: vLLM 전용 (16GB VRAM)[/]\n"
-                "[dim]• CPU: Embedding + 비즈니스 로직[/]\n"
-                "[dim]• 아키텍처: 4-Layer Pipeline[/]",
-                title="🚀 Welcome",
-                border_style="cyan",
-            ))
+            self.print(
+                Panel.fit(
+                    "[bold cyan]TrendOps Demo[/]\n"
+                    "실시간 여론 분석 및 SNS 자동화 파이프라인\n\n"
+                    "[dim]• GPU: vLLM 전용 (16GB VRAM)[/]\n"
+                    "[dim]• CPU: Embedding + 비즈니스 로직[/]\n"
+                    "[dim]• 아키텍처: 4-Layer Pipeline[/]",
+                    title="🚀 Welcome",
+                    border_style="cyan",
+                )
+            )
         else:
             print("=" * 60)
             print("TrendOps Demo")
             print("실시간 여론 분석 및 SNS 자동화 파이프라인")
             print("=" * 60)
-        
+
         self.wait_for_input()
-    
+
     async def run_trigger_stage(self) -> list[DemoKeyword]:
         """Stage 1: Trigger - 트렌드 감지"""
-        self.print("\n[bold yellow]━━━ Stage 1: TRIGGER ━━━[/]" if self.console else "\n=== Stage 1: TRIGGER ===")
-        
+        self.print(
+            "\n[bold yellow]━━━ Stage 1: TRIGGER ━━━[/]"
+            if self.console
+            else "\n=== Stage 1: TRIGGER ==="
+        )
+
         if self.console:
             with Progress(
                 SpinnerColumn(),
@@ -185,17 +195,17 @@ class DemoRunner:
         else:
             print("Detecting trends...")
             await self.delay(2.0)
-        
+
         # 결과 표시
         keywords = SAMPLE_KEYWORDS[:5]
-        
+
         if self.console:
             table = Table(title="📈 감지된 트렌드 키워드", show_lines=True)
             table.add_column("Rank", style="dim", width=6)
             table.add_column("Keyword", style="cyan")
             table.add_column("Score", justify="right", style="green")
             table.add_column("Source", style="yellow")
-            
+
             for i, kw in enumerate(keywords, 1):
                 score_style = "bold green" if kw.score >= 8.0 else "green"
                 table.add_row(
@@ -204,22 +214,28 @@ class DemoRunner:
                     Text(f"{kw.score:.1f}", style=score_style),
                     kw.source.upper(),
                 )
-            
+
             self.print(table)
             self.print(f"\n[green]✓[/] {len(keywords)}개 키워드 감지 완료 (threshold ≥ 7.0)")
         else:
             for i, kw in enumerate(keywords, 1):
                 print(f"  #{i} {kw.keyword} (Score: {kw.score}, Source: {kw.source})")
             print(f"\n✓ {len(keywords)} keywords detected")
-        
+
         self.wait_for_input()
         return keywords
-    
+
     async def run_collector_stage(self, keyword: DemoKeyword) -> list[DemoArticle]:
         """Stage 2: Collector - 뉴스 수집"""
-        self.print(f"\n[bold yellow]━━━ Stage 2: COLLECTOR ━━━[/]" if self.console else "\n=== Stage 2: COLLECTOR ===")
-        self.print(f"[dim]Target: {keyword.keyword}[/]" if self.console else f"Target: {keyword.keyword}")
-        
+        self.print(
+            "\n[bold yellow]━━━ Stage 2: COLLECTOR ━━━[/]"
+            if self.console
+            else "\n=== Stage 2: COLLECTOR ==="
+        )
+        self.print(
+            f"[dim]Target: {keyword.keyword}[/]" if self.console else f"Target: {keyword.keyword}"
+        )
+
         if self.console:
             with Progress(
                 SpinnerColumn(),
@@ -235,29 +251,37 @@ class DemoRunner:
         else:
             print("Collecting news articles...")
             await self.delay(2.5)
-        
+
         # 결과 표시
         articles = SAMPLE_ARTICLES
-        
+
         if self.console:
             tree = Tree("📚 수집된 기사")
             for article in articles:
-                tree.add(f"[cyan]{article.title}[/] [dim]({article.source}, {article.published})[/]")
+                tree.add(
+                    f"[cyan]{article.title}[/] [dim]({article.source}, {article.published})[/]"
+                )
             self.print(tree)
-            
+
             self.print(f"\n[green]✓[/] {len(articles) * 3}건 수집 → 중복 제거 후 {len(articles)}건")
         else:
             for article in articles:
                 print(f"  - {article.title} ({article.source})")
             print(f"\n✓ {len(articles)} articles collected after deduplication")
-        
+
         self.wait_for_input()
         return articles
-    
-    async def run_analyst_stage(self, keyword: DemoKeyword, articles: list[DemoArticle]) -> DemoAnalysis:
+
+    async def run_analyst_stage(
+        self, keyword: DemoKeyword, articles: list[DemoArticle]
+    ) -> DemoAnalysis:
         """Stage 3: Analyst - LLM 분석"""
-        self.print(f"\n[bold yellow]━━━ Stage 3: ANALYST ━━━[/]" if self.console else "\n=== Stage 3: ANALYST ===")
-        
+        self.print(
+            "\n[bold yellow]━━━ Stage 3: ANALYST ━━━[/]"
+            if self.console
+            else "\n=== Stage 3: ANALYST ==="
+        )
+
         if self.console:
             with Progress(
                 SpinnerColumn(),
@@ -275,59 +299,71 @@ class DemoRunner:
         else:
             print("Running LLM analysis...")
             await self.delay(3.5)
-        
+
         # 결과 표시
         analysis = SAMPLE_ANALYSIS
-        
+
         if self.console:
             # 요약
-            self.print(Panel(
-                f"[bold]📝 요약[/]\n{analysis.summary}",
-                border_style="blue",
-            ))
-            
+            self.print(
+                Panel(
+                    f"[bold]📝 요약[/]\n{analysis.summary}",
+                    border_style="blue",
+                )
+            )
+
             # 감성 분석
             sentiment_bar = self._create_sentiment_bar(analysis.sentiment)
-            self.print(Panel(
-                f"[bold]😊 감성 분포[/]\n{sentiment_bar}",
-                border_style="green",
-            ))
-            
+            self.print(
+                Panel(
+                    f"[bold]😊 감성 분포[/]\n{sentiment_bar}",
+                    border_style="green",
+                )
+            )
+
             # 핵심 포인트
             points_text = "\n".join(f"• {point}" for point in analysis.key_points)
-            self.print(Panel(
-                f"[bold]🎯 핵심 포인트[/]\n{points_text}",
-                border_style="yellow",
-            ))
-            
+            self.print(
+                Panel(
+                    f"[bold]🎯 핵심 포인트[/]\n{points_text}",
+                    border_style="yellow",
+                )
+            )
+
             self.print("[green]✓[/] 분석 완료 | [bold green]Guardrail: PASSED[/]")
         else:
             print(f"\nSummary: {analysis.summary[:100]}...")
-            print(f"Sentiment: Positive {analysis.sentiment['positive']:.0%}, "
-                  f"Negative {analysis.sentiment['negative']:.0%}, "
-                  f"Neutral {analysis.sentiment['neutral']:.0%}")
+            print(
+                f"Sentiment: Positive {analysis.sentiment['positive']:.0%}, "
+                f"Negative {analysis.sentiment['negative']:.0%}, "
+                f"Neutral {analysis.sentiment['neutral']:.0%}"
+            )
             print("✓ Analysis complete | Guardrail: PASSED")
-        
+
         self.wait_for_input()
         return analysis
-    
+
     def _create_sentiment_bar(self, sentiment: dict[str, float]) -> str:
         """감성 분석 바 생성"""
         pos = int(sentiment["positive"] * 20)
         neg = int(sentiment["negative"] * 20)
         neu = int(sentiment["neutral"] * 20)
-        
+
         bar = (
             f"긍정 [green]{'█' * pos}[/] {sentiment['positive']:.0%}\n"
             f"부정 [red]{'█' * neg}[/] {sentiment['negative']:.0%}\n"
             f"중립 [yellow]{'█' * neu}[/] {sentiment['neutral']:.0%}"
         )
         return bar
-    
+
     async def run_publisher_stage(self, analysis: DemoAnalysis) -> DemoContent:
         """Stage 4: Publisher - 콘텐츠 발행"""
-        self.print(f"\n[bold yellow]━━━ Stage 4: PUBLISHER ━━━[/]" if self.console else "\n=== Stage 4: PUBLISHER ===")
-        
+        self.print(
+            "\n[bold yellow]━━━ Stage 4: PUBLISHER ━━━[/]"
+            if self.console
+            else "\n=== Stage 4: PUBLISHER ==="
+        )
+
         if self.console:
             with Progress(
                 SpinnerColumn(),
@@ -343,7 +379,7 @@ class DemoRunner:
         else:
             print("Generating content...")
             await self.delay(2.5)
-        
+
         # 결과 표시
         content = DemoContent(
             keyword=analysis.keyword,
@@ -351,62 +387,70 @@ class DemoRunner:
             caption=f"🔥 {analysis.keyword}\n\n{analysis.summary[:100]}...\n\n#AI규제 #인공지능 #테크트렌드",
             status="pending_review",
         )
-        
+
         if self.console:
-            self.print(Panel(
-                f"[bold]📸 생성된 콘텐츠[/]\n\n"
-                f"[cyan]이미지:[/] {content.image_path}\n"
-                f"[cyan]해상도:[/] 1080x1080 (Instagram 최적화)\n\n"
-                f"[cyan]캡션:[/]\n{content.caption}",
-                border_style="magenta",
-            ))
-            
-            self.print(Panel(
-                "[bold yellow]⏳ Human Review 대기 중[/]\n\n"
-                "Slack으로 승인 요청이 전송되었습니다.\n"
-                "[dim]관리자 승인 후 Instagram/Threads에 자동 발행됩니다.[/]",
-                title="👁️ Review Gate",
-                border_style="yellow",
-            ))
+            self.print(
+                Panel(
+                    f"[bold]📸 생성된 콘텐츠[/]\n\n"
+                    f"[cyan]이미지:[/] {content.image_path}\n"
+                    f"[cyan]해상도:[/] 1080x1080 (Instagram 최적화)\n\n"
+                    f"[cyan]캡션:[/]\n{content.caption}",
+                    border_style="magenta",
+                )
+            )
+
+            self.print(
+                Panel(
+                    "[bold yellow]⏳ Human Review 대기 중[/]\n\n"
+                    "Slack으로 승인 요청이 전송되었습니다.\n"
+                    "[dim]관리자 승인 후 Instagram/Threads에 자동 발행됩니다.[/]",
+                    title="👁️ Review Gate",
+                    border_style="yellow",
+                )
+            )
         else:
-            print(f"\nContent generated:")
+            print("\nContent generated:")
             print(f"  Image: {content.image_path}")
             print(f"  Caption: {content.caption[:50]}...")
             print("\n⏳ Waiting for human review via Slack...")
-        
+
         self.wait_for_input()
         return content
-    
+
     async def run_summary(self):
         """최종 결과 요약"""
         if self.console:
-            self.print(Panel(
-                "[bold green]🎉 파이프라인 완료![/]\n\n"
-                "📊 [bold]처리 결과[/]\n"
-                "  • 감지된 키워드: 5개\n"
-                "  • 수집된 기사: 156건\n"
-                "  • 중복 제거: 60% (→ 62건)\n"
-                "  • 분석 완료: 5건\n"
-                "  • 발행 대기: 3건\n"
-                "  • Guardrail 통과율: 100%\n\n"
-                "⏱️ [bold]전체 소요 시간[/]: 28.3초\n\n"
-                "[dim]Slack에서 승인 후 Instagram/Threads에 자동 발행됩니다.[/]",
-                title="✅ Pipeline Complete",
-                border_style="green",
-            ))
-            
+            self.print(
+                Panel(
+                    "[bold green]🎉 파이프라인 완료![/]\n\n"
+                    "📊 [bold]처리 결과[/]\n"
+                    "  • 감지된 키워드: 5개\n"
+                    "  • 수집된 기사: 156건\n"
+                    "  • 중복 제거: 60% (→ 62건)\n"
+                    "  • 분석 완료: 5건\n"
+                    "  • 발행 대기: 3건\n"
+                    "  • Guardrail 통과율: 100%\n\n"
+                    "⏱️ [bold]전체 소요 시간[/]: 28.3초\n\n"
+                    "[dim]Slack에서 승인 후 Instagram/Threads에 자동 발행됩니다.[/]",
+                    title="✅ Pipeline Complete",
+                    border_style="green",
+                )
+            )
+
             # 포트폴리오 하이라이트
-            self.print(Panel(
-                "[bold cyan]💼 포트폴리오 하이라이트[/]\n\n"
-                "• [green]GPU 최적화[/]: vLLM 단독 점유로 OOM 완전 방지\n"
-                "• [green]Outlines[/]: LLM JSON 출력 100% 보장\n"
-                "• [green]Semantic Dedup[/]: 60% 중복 데이터 절감\n"
-                "• [green]Hybrid Search[/]: BM25 + Vector (RRF Fusion)\n"
-                "• [green]Guardrails[/]: AI 안전성 자동 검증\n"
-                "• [green]Human-in-the-Loop[/]: Slack 승인 게이트",
-                title="🏆 Key Achievements",
-                border_style="blue",
-            ))
+            self.print(
+                Panel(
+                    "[bold cyan]💼 포트폴리오 하이라이트[/]\n\n"
+                    "• [green]GPU 최적화[/]: vLLM 단독 점유로 OOM 완전 방지\n"
+                    "• [green]Outlines[/]: LLM JSON 출력 100% 보장\n"
+                    "• [green]Semantic Dedup[/]: 60% 중복 데이터 절감\n"
+                    "• [green]Hybrid Search[/]: BM25 + Vector (RRF Fusion)\n"
+                    "• [green]Guardrails[/]: AI 안전성 자동 검증\n"
+                    "• [green]Human-in-the-Loop[/]: Slack 승인 게이트",
+                    title="🏆 Key Achievements",
+                    border_style="blue",
+                )
+            )
         else:
             print("\n" + "=" * 60)
             print("PIPELINE COMPLETE")
@@ -416,27 +460,27 @@ class DemoRunner:
             print("  Analyses completed: 5")
             print("  Pending publication: 3")
             print("  Total time: 28.3s")
-    
+
     async def run(self):
         """전체 데모 실행"""
         await self.run_welcome()
-        
+
         # Stage 1: Trigger
         keywords = await self.run_trigger_stage()
-        
+
         # 첫 번째 키워드로 나머지 단계 시연
         if keywords:
             keyword = keywords[0]
-            
+
             # Stage 2: Collector
             articles = await self.run_collector_stage(keyword)
-            
+
             # Stage 3: Analyst
             analysis = await self.run_analyst_stage(keyword, articles)
-            
+
             # Stage 4: Publisher
             content = await self.run_publisher_stage(analysis)
-        
+
         # Summary
         await self.run_summary()
 
@@ -444,6 +488,7 @@ class DemoRunner:
 # =============================================================================
 # CLI Entry Point
 # =============================================================================
+
 
 def main():
     """CLI 진입점"""
@@ -468,9 +513,9 @@ Examples:
         action="store_true",
         help="대화형 모드 (각 단계별 사용자 확인)",
     )
-    
+
     args = parser.parse_args()
-    
+
     try:
         runner = DemoRunner(fast=args.fast, interactive=args.interactive)
         asyncio.run(runner.run())

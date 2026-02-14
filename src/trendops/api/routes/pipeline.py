@@ -8,14 +8,13 @@ from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from trendops.database.connection import get_session
 from trendops.database.models import DailyReport, PipelineMetric
-
 
 router = APIRouter()
 
@@ -24,8 +23,10 @@ router = APIRouter()
 # Request/Response Schemas
 # =============================================================================
 
+
 class PipelineMetricCreate(BaseModel):
     """파이프라인 메트릭 생성 요청"""
+
     stage: str = Field(..., description="파이프라인 단계")
     keyword: str | None = Field(default=None, description="키워드")
     status: Literal["success", "failure", "partial"] = Field(..., description="상태")
@@ -38,6 +39,7 @@ class PipelineMetricCreate(BaseModel):
 
 class PipelineMetricResponse(BaseModel):
     """파이프라인 메트릭 응답"""
+
     id: UUID
     stage: str
     keyword: str | None
@@ -47,13 +49,14 @@ class PipelineMetricResponse(BaseModel):
     items_processed: int
     items_failed: int
     recorded_at: datetime | None
-    
+
     class Config:
         from_attributes = True
 
 
 class PipelineMetricListResponse(BaseModel):
     """파이프라인 메트릭 목록 응답"""
+
     items: list[PipelineMetricResponse]
     total: int
     page: int
@@ -62,6 +65,7 @@ class PipelineMetricListResponse(BaseModel):
 
 class PipelineStageStats(BaseModel):
     """단계별 통계"""
+
     stage: str
     total_runs: int
     success_count: int
@@ -73,6 +77,7 @@ class PipelineStageStats(BaseModel):
 
 class PipelineSummary(BaseModel):
     """파이프라인 전체 요약"""
+
     total_runs: int
     success_rate: float
     avg_latency_ms: float | None
@@ -82,6 +87,7 @@ class PipelineSummary(BaseModel):
 
 class DailyReportResponse(BaseModel):
     """일별 리포트 응답"""
+
     id: UUID
     report_date: datetime
     trends_detected: int
@@ -94,13 +100,14 @@ class DailyReportResponse(BaseModel):
     success_rate: float | None
     avg_latency_ms: int | None
     created_at: datetime | None
-    
+
     class Config:
         from_attributes = True
 
 
 class TriggerPipelineRequest(BaseModel):
     """파이프라인 트리거 요청"""
+
     keywords: list[str] = Field(..., min_length=1, max_length=10, description="처리할 키워드")
     priority: int = Field(default=5, ge=0, le=10, description="우선순위")
     dry_run: bool = Field(default=False, description="테스트 실행 여부")
@@ -108,6 +115,7 @@ class TriggerPipelineRequest(BaseModel):
 
 class TriggerPipelineResponse(BaseModel):
     """파이프라인 트리거 응답"""
+
     job_ids: list[str]
     message: str
     queued_count: int
@@ -116,6 +124,7 @@ class TriggerPipelineResponse(BaseModel):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def metric_to_response(metric: PipelineMetric) -> PipelineMetricResponse:
     """PipelineMetric 모델을 응답 스키마로 변환"""
@@ -136,6 +145,7 @@ def metric_to_response(metric: PipelineMetric) -> PipelineMetricResponse:
 # Endpoints
 # =============================================================================
 
+
 @router.get(
     "/metrics",
     response_model=PipelineMetricListResponse,
@@ -155,36 +165,36 @@ async def list_pipeline_metrics(
     """파이프라인 메트릭 목록 조회"""
     query = select(PipelineMetric)
     count_query = select(func.count(PipelineMetric.id))
-    
+
     if stage:
         query = query.where(PipelineMetric.stage == stage)
         count_query = count_query.where(PipelineMetric.stage == stage)
-    
+
     if status:
         query = query.where(PipelineMetric.status == status)
         count_query = count_query.where(PipelineMetric.status == status)
-    
+
     if keyword:
         query = query.where(PipelineMetric.keyword.ilike(f"%{keyword}%"))
         count_query = count_query.where(PipelineMetric.keyword.ilike(f"%{keyword}%"))
-    
+
     if start_date:
         query = query.where(PipelineMetric.recorded_at >= start_date)
         count_query = count_query.where(PipelineMetric.recorded_at >= start_date)
-    
+
     if end_date:
         query = query.where(PipelineMetric.recorded_at <= end_date)
         count_query = count_query.where(PipelineMetric.recorded_at <= end_date)
-    
+
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     offset = (page - 1) * page_size
     query = query.order_by(PipelineMetric.recorded_at.desc()).offset(offset).limit(page_size)
-    
+
     result = await session.execute(query)
     metrics = result.scalars().all()
-    
+
     return PipelineMetricListResponse(
         items=[metric_to_response(m) for m in metrics],
         total=total,
@@ -218,7 +228,7 @@ async def create_pipeline_metric(
     session.add(metric)
     await session.flush()
     await session.refresh(metric)
-    
+
     return metric_to_response(metric)
 
 
@@ -234,14 +244,13 @@ async def get_pipeline_summary(
 ) -> PipelineSummary:
     """파이프라인 요약 조회"""
     since = datetime.now() - timedelta(hours=hours)
-    
+
     # 전체 실행 수
     total_result = await session.execute(
-        select(func.count(PipelineMetric.id))
-        .where(PipelineMetric.recorded_at >= since)
+        select(func.count(PipelineMetric.id)).where(PipelineMetric.recorded_at >= since)
     )
     total_runs = total_result.scalar() or 0
-    
+
     # 성공률
     success_result = await session.execute(
         select(func.count(PipelineMetric.id))
@@ -250,7 +259,7 @@ async def get_pipeline_summary(
     )
     success_count = success_result.scalar() or 0
     success_rate = (success_count / total_runs * 100) if total_runs > 0 else 0.0
-    
+
     # 평균 지연시간
     avg_latency_result = await session.execute(
         select(func.avg(PipelineMetric.duration_ms))
@@ -258,7 +267,7 @@ async def get_pipeline_summary(
         .where(PipelineMetric.duration_ms.isnot(None))
     )
     avg_latency = avg_latency_result.scalar()
-    
+
     # 단계별 통계
     stage_result = await session.execute(
         select(
@@ -272,22 +281,22 @@ async def get_pipeline_summary(
         .where(PipelineMetric.recorded_at >= since)
         .group_by(PipelineMetric.stage)
     )
-    
-    from sqlalchemy import Integer
-    
+
     stage_stats = []
     for row in stage_result.all():
         stage, total, success, failure, avg_dur, items = row
-        stage_stats.append(PipelineStageStats(
-            stage=stage,
-            total_runs=total or 0,
-            success_count=int(success or 0),
-            failure_count=int(failure or 0),
-            success_rate=(int(success or 0) / total * 100) if total else 0.0,
-            avg_duration_ms=round(float(avg_dur), 2) if avg_dur else None,
-            total_items_processed=int(items or 0),
-        ))
-    
+        stage_stats.append(
+            PipelineStageStats(
+                stage=stage,
+                total_runs=total or 0,
+                success_count=int(success or 0),
+                failure_count=int(failure or 0),
+                success_rate=(int(success or 0) / total * 100) if total else 0.0,
+                avg_duration_ms=round(float(avg_dur), 2) if avg_dur else None,
+                total_items_processed=int(items or 0),
+            )
+        )
+
     # 최근 에러
     error_result = await session.execute(
         select(PipelineMetric)
@@ -306,7 +315,7 @@ async def get_pipeline_summary(
         }
         for e in errors
     ]
-    
+
     return PipelineSummary(
         total_runs=total_runs,
         success_rate=round(success_rate, 2),
@@ -328,12 +337,10 @@ async def list_daily_reports(
 ) -> list[DailyReportResponse]:
     """일별 리포트 목록"""
     result = await session.execute(
-        select(DailyReport)
-        .order_by(DailyReport.report_date.desc())
-        .limit(days)
+        select(DailyReport).order_by(DailyReport.report_date.desc()).limit(days)
     )
     reports = result.scalars().all()
-    
+
     return [
         DailyReportResponse(
             id=r.id,
@@ -365,12 +372,12 @@ async def trigger_pipeline(
 ) -> TriggerPipelineResponse:
     """파이프라인 수동 트리거"""
     from uuid import uuid4
-    
+
     job_ids = []
     for keyword in request.keywords:
         job_id = str(uuid4())
         job_ids.append(job_id)
-        
+
         # 메트릭 기록 (queued 상태)
         metric = PipelineMetric(
             stage="trigger",
@@ -384,9 +391,9 @@ async def trigger_pipeline(
             },
         )
         session.add(metric)
-    
+
     await session.flush()
-    
+
     return TriggerPipelineResponse(
         job_ids=job_ids,
         message=f"Pipeline triggered for {len(request.keywords)} keywords",
@@ -405,14 +412,13 @@ async def get_pipeline_status(
     """파이프라인 현재 상태"""
     now = datetime.now()
     last_hour = now - timedelta(hours=1)
-    
+
     # 최근 1시간 실행
     recent_result = await session.execute(
-        select(func.count(PipelineMetric.id))
-        .where(PipelineMetric.recorded_at >= last_hour)
+        select(func.count(PipelineMetric.id)).where(PipelineMetric.recorded_at >= last_hour)
     )
     recent_runs = recent_result.scalar() or 0
-    
+
     # 최근 에러
     error_result = await session.execute(
         select(func.count(PipelineMetric.id))
@@ -420,15 +426,13 @@ async def get_pipeline_status(
         .where(PipelineMetric.status == "failure")
     )
     recent_errors = error_result.scalar() or 0
-    
+
     # 마지막 실행 시간
     last_run_result = await session.execute(
-        select(PipelineMetric.recorded_at)
-        .order_by(PipelineMetric.recorded_at.desc())
-        .limit(1)
+        select(PipelineMetric.recorded_at).order_by(PipelineMetric.recorded_at.desc()).limit(1)
     )
     last_run = last_run_result.scalar_one_or_none()
-    
+
     return {
         "status": "running",
         "recent_runs_1h": recent_runs,

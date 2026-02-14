@@ -20,19 +20,22 @@ from sqlalchemy import (
     Text,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PGUUID
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 class Base(DeclarativeBase):
     """SQLAlchemy 베이스 클래스"""
+
     pass
 
 
 class Keyword(Base):
     """트렌드 키워드 테이블"""
+
     __tablename__ = "keywords"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -55,24 +58,24 @@ class Keyword(Base):
         JSONB,
         default=dict,
     )
-    
+
     # Relationships
-    articles: Mapped[list["Article"]] = relationship(
+    articles: Mapped[list[Article]] = relationship(
         "Article",
         back_populates="keyword",
         lazy="selectin",
     )
-    analyses: Mapped[list["Analysis"]] = relationship(
+    analyses: Mapped[list[Analysis]] = relationship(
         "Analysis",
         back_populates="keyword",
         lazy="selectin",
     )
-    publications: Mapped[list["Publication"]] = relationship(
+    publications: Mapped[list[Publication]] = relationship(
         "Publication",
         back_populates="keyword",
         lazy="selectin",
     )
-    
+
     def to_dict(self) -> dict[str, Any]:
         """딕셔너리 변환"""
         return {
@@ -88,8 +91,9 @@ class Keyword(Base):
 
 class Article(Base):
     """수집된 기사 테이블"""
+
     __tablename__ = "articles"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -117,10 +121,10 @@ class Article(Base):
         JSONB,
         default=dict,
     )
-    
+
     # Relationships
-    keyword: Mapped["Keyword"] = relationship("Keyword", back_populates="articles")
-    
+    keyword: Mapped[Keyword] = relationship("Keyword", back_populates="articles")
+
     def to_dict(self) -> dict[str, Any]:
         """딕셔너리 변환"""
         return {
@@ -136,8 +140,9 @@ class Article(Base):
 
 class Analysis(Base):
     """LLM 분석 결과 테이블"""
+
     __tablename__ = "analyses"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -161,15 +166,15 @@ class Analysis(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
-    
+
     # Relationships
-    keyword: Mapped["Keyword"] = relationship("Keyword", back_populates="analyses")
-    publications: Mapped[list["Publication"]] = relationship(
+    keyword: Mapped[Keyword] = relationship("Keyword", back_populates="analyses")
+    publications: Mapped[list[Publication]] = relationship(
         "Publication",
         back_populates="analysis",
         lazy="selectin",
     )
-    
+
     def to_dict(self) -> dict[str, Any]:
         """딕셔너리 변환"""
         return {
@@ -188,8 +193,9 @@ class Analysis(Base):
 
 class Publication(Base):
     """SNS 발행 기록 테이블"""
+
     __tablename__ = "publications"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -223,11 +229,11 @@ class Publication(Base):
         JSONB,
         default=dict,
     )
-    
+
     # Relationships
-    keyword: Mapped["Keyword"] = relationship("Keyword", back_populates="publications")
-    analysis: Mapped["Analysis"] = relationship("Analysis", back_populates="publications")
-    
+    keyword: Mapped[Keyword] = relationship("Keyword", back_populates="publications")
+    analysis: Mapped[Analysis] = relationship("Analysis", back_populates="publications")
+
     def to_dict(self) -> dict[str, Any]:
         """딕셔너리 변환"""
         return {
@@ -246,8 +252,9 @@ class Publication(Base):
 
 class PipelineMetric(Base):
     """파이프라인 메트릭 테이블"""
+
     __tablename__ = "pipeline_metrics"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -270,7 +277,7 @@ class PipelineMetric(Base):
         JSONB,
         default=dict,
     )
-    
+
     def to_dict(self) -> dict[str, Any]:
         """딕셔너리 변환"""
         return {
@@ -287,8 +294,9 @@ class PipelineMetric(Base):
 
 class DailyReport(Base):
     """일별 리포트 테이블"""
+
     __tablename__ = "daily_reports"
-    
+
     id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True),
         primary_key=True,
@@ -313,7 +321,7 @@ class DailyReport(Base):
         DateTime(timezone=True),
         server_default=func.now(),
     )
-    
+
     def to_dict(self) -> dict[str, Any]:
         """딕셔너리 변환"""
         return {

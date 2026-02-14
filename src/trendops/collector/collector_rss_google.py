@@ -78,7 +78,7 @@ class RetryConfig(BaseModel):
 class GoogleNewsRSSCollector:
     """
     Google News RSS Collector
-    
+
     - 키워드 기반 뉴스 검색
     - 차단 위험 Zero (공식 RSS)
     - 비동기 + Retry 지원
@@ -143,7 +143,7 @@ class GoogleNewsRSSCollector:
     def _is_relevant(self, article: Article, keyword: str) -> bool:
         """
         [Garbage Filter] 기사가 검색 키워드와 관련이 있는지 검증
-        
+
         Google News는 검색 결과가 없을 때 인기 뉴스(Top Stories)를 반환하는 경우가 있음.
         이를 방지하기 위해 제목이나 요약에 키워드 단어가 포함되어 있는지 확인.
         """
@@ -151,17 +151,17 @@ class GoogleNewsRSSCollector:
         clean_kw = keyword.replace("#", "").replace('"', "").replace("'", "").strip()
         if not clean_kw:
             return True  # 키워드가 없으면 검증 패스
-            
+
         # 2. 검색 대상 텍스트 (제목 + 요약)
         target_text = (article.title + " " + article.summary).lower()
-        
+
         # 3. 키워드 토큰화 (띄어쓰기 기준 분리)
         # 예: "Ajit Pawar" -> ["ajit", "pawar"]
         tokens = [t.lower() for t in clean_kw.split() if len(t) > 1]
-        
-        if not tokens: # 토큰이 없거나 한 글자 단어뿐이면 검증 완화
-             return clean_kw.lower() in target_text
-             
+
+        if not tokens:  # 토큰이 없거나 한 글자 단어뿐이면 검증 완화
+            return clean_kw.lower() in target_text
+
         # 4. 토큰 중 하나라도 포함되어 있으면 통과 (OR 조건)
         # 너무 엄격하면(AND) 검색 유연성이 떨어지므로, 하나라도 매칭되면 관련 기사로 인정
         return any(token in target_text for token in tokens)
@@ -181,11 +181,11 @@ class GoogleNewsRSSCollector:
                     keyword=keyword,
                     summary=entry.get("summary", ""),
                 )
-                
+
                 # [추가] 관련성 검증
                 if self._is_relevant(article, keyword):
                     articles.append(article)
-                
+
             except Exception as e:
                 logger.warning(f"Failed to parse article: {e}")
                 continue
@@ -201,13 +201,15 @@ class GoogleNewsRSSCollector:
 
         try:
             content = await self._fetch_with_retry(url)
-            
+
             # 파싱 과정에서 _is_relevant 필터링 수행
             articles = self._parse_feed(content, keyword, max_results)
 
             # 필터링 후 개수 확인
             if not articles:
-                 logger.warning(f"No relevant articles found for '{keyword}' (filtered unrelated results)")
+                logger.warning(
+                    f"No relevant articles found for '{keyword}' (filtered unrelated results)"
+                )
 
             logger.info(f"Successfully fetched {len(articles)} relevant articles for '{keyword}'")
 
@@ -255,6 +257,7 @@ class GoogleNewsRSSCollector:
 
 # CLI 테스트용
 if __name__ == "__main__":
+
     async def main() -> None:
         async with GoogleNewsRSSCollector() as collector:
             # 테스트: 관련 없는 결과가 잘 걸러지는지 확인
@@ -264,7 +267,7 @@ if __name__ == "__main__":
             print(f"Relevant Articles found: {result.count}")
             for article in result.articles:
                 print(f"  - {article.title}")
-            
+
             print("\n--- Testing 트럼프 (Expect relevant results) ---")
             result = await collector.fetch("트럼프", max_results=5)
             print(f"Articles found: {result.count}")

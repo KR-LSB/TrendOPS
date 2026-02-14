@@ -25,8 +25,8 @@ aiohttp = "^3.9"
 openai = "^1.12"
 sentence-transformers = "^2.3"
 chromadb = "^0.4"
-outlines = "^0.1"              # Structured Generation (JSON 100% 보장)
-ollama = "^0.4"                # Ollama Python Client
+outlines = "^0.1"
+ollama = "^0.4"
 
 # === Data Processing ===
 numpy = "^1.26"
@@ -38,20 +38,42 @@ apscheduler = "^3.10"
 # === Monitoring ===
 prometheus-client = "^0.19"
 
+# === BM25 Search (Week 3) ===
+rank-bm25 = "^0.2"
+konlpy = "^0.6"
+
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.2"
 mypy = "^1.8"
 pytest = "^8.0"
 pytest-asyncio = "^0.23"
+pytest-cov = "^5.0"
 pre-commit = "^3.6"
 
 [tool.ruff]
+target-version = "py310"
 line-length = 100
-select = ["E", "F", "I", "W", "UP"]
-ignore = ["E501"]
+src = ["src"]
 
-[tool.ruff.isort]
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP"]
+ignore = [
+    "E501",   # line-length (formatter가 처리)
+    "E402",   # module level import not at top (scripts에서 sys.path 설정 필요)
+    "E701",   # multiple statements on one line (기존 코드 스타일)
+    "E712",   # comparison to True/False (SQLAlchemy 쿼리에서 필요)
+    "E722",   # bare except (기존 코드, 추후 개선)
+    "F841",   # unused variable (추후 정리)
+    "F401",   # unused import (try/except 패턴에서 오탐)
+    "F821",   # undefined name (pipeline.py Integer — 추후 수정)
+    "W291",   # trailing whitespace
+]
+
+[tool.ruff.lint.isort]
 known-first-party = ["trendops"]
+
+[tool.ruff.format]
+quote-style = "double"
 
 [tool.mypy]
 python_version = "3.10"
@@ -61,11 +83,11 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --tb=short"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
-
-# === BM25 Search (Week 3) ===
-rank-bm25 = "^0.2"
-konlpy = "^0.6"

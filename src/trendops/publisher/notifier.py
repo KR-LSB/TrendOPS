@@ -14,23 +14,23 @@ Features:
 
 Usage:
     from trendops.publisher.notifier import SlackNotifier, NotificationType
-    
+
     notifier = SlackNotifier(webhook_url="https://hooks.slack.com/...")
-    
+
     # 성공 알림
     await notifier.send_success(
         title="발행 완료",
         message="트럼프 관세 콘텐츠가 Instagram에 발행되었습니다.",
         details={"post_url": "https://..."},
     )
-    
+
     # 실패 알림
     await notifier.send_failure(
         title="발행 실패",
         message="Instagram API 에러",
         error=exception,
     )
-    
+
     # 일일 리포트
     await notifier.send_daily_report(
         date="2025-01-25",
@@ -61,8 +61,10 @@ logger = logging.getLogger(__name__)
 # Enums
 # =============================================================================
 
+
 class NotificationType(str, Enum):
     """알림 타입"""
+
     SUCCESS = "success"
     FAILURE = "failure"
     WARNING = "warning"
@@ -71,6 +73,7 @@ class NotificationType(str, Enum):
 
 class PipelineStage(str, Enum):
     """파이프라인 단계"""
+
     TRIGGER = "trigger"
     COLLECT = "collect"
     ANALYZE = "analyze"
@@ -83,16 +86,18 @@ class PipelineStage(str, Enum):
 # Data Classes
 # =============================================================================
 
+
 @dataclass
 class NotificationResult:
     """알림 전송 결과"""
+
     success: bool
     notification_type: NotificationType
     title: str
     timestamp: datetime = field(default_factory=datetime.now)
     error_message: str | None = None
     response_code: int | None = None
-    
+
     @property
     def is_success(self) -> bool:
         return self.success
@@ -101,6 +106,7 @@ class NotificationResult:
 @dataclass
 class DailyStats:
     """일일 통계"""
+
     trends_detected: int = 0
     articles_collected: int = 0
     articles_analyzed: int = 0
@@ -108,7 +114,7 @@ class DailyStats:
     posts_published: int = 0
     posts_rejected: int = 0
     errors_count: int = 0
-    
+
     def to_dict(self) -> dict[str, int]:
         return {
             "trends_detected": self.trends_detected,
@@ -119,22 +125,33 @@ class DailyStats:
             "posts_rejected": self.posts_rejected,
             "errors_count": self.errors_count,
         }
-    
+
     @classmethod
-    def from_dict(cls, data: dict[str, int]) -> "DailyStats":
-        return cls(**{k: data.get(k, 0) for k in [
-            "trends_detected", "articles_collected", "articles_analyzed",
-            "images_generated", "posts_published", "posts_rejected", "errors_count"
-        ]})
+    def from_dict(cls, data: dict[str, int]) -> DailyStats:
+        return cls(
+            **{
+                k: data.get(k, 0)
+                for k in [
+                    "trends_detected",
+                    "articles_collected",
+                    "articles_analyzed",
+                    "images_generated",
+                    "posts_published",
+                    "posts_rejected",
+                    "errors_count",
+                ]
+            }
+        )
 
 
 # =============================================================================
 # Slack Message Builder
 # =============================================================================
 
+
 class SlackBlockBuilder:
     """Slack Block Kit 메시지 빌더"""
-    
+
     # 색상 코드
     COLORS = {
         NotificationType.SUCCESS: "#36a64f",
@@ -142,7 +159,7 @@ class SlackBlockBuilder:
         NotificationType.WARNING: "#ffcc00",
         NotificationType.INFO: "#0066ff",
     }
-    
+
     # 이모지
     EMOJIS = {
         NotificationType.SUCCESS: "✅",
@@ -150,7 +167,7 @@ class SlackBlockBuilder:
         NotificationType.WARNING: "⚠️",
         NotificationType.INFO: "ℹ️",
     }
-    
+
     @classmethod
     def build_notification(
         cls,
@@ -164,7 +181,7 @@ class SlackBlockBuilder:
         emoji = cls.EMOJIS.get(notification_type, "📢")
         color = cls.COLORS.get(notification_type, "#808080")
         timestamp = timestamp or datetime.now()
-        
+
         blocks = [
             {
                 "type": "header",
@@ -172,45 +189,51 @@ class SlackBlockBuilder:
                     "type": "plain_text",
                     "text": f"{emoji} {title}",
                     "emoji": True,
-                }
+                },
             },
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": message,
-                }
+                },
             },
         ]
-        
+
         # 상세 정보 추가
         if details:
             fields = []
             for key, value in details.items():
-                fields.append({
-                    "type": "mrkdwn",
-                    "text": f"*{key}:*\n{value}",
-                })
-            
+                fields.append(
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*{key}:*\n{value}",
+                    }
+                )
+
             # 최대 10개 필드 (Slack 제한)
             for i in range(0, len(fields), 2):
-                block_fields = fields[i:i+2]
-                blocks.append({
-                    "type": "section",
-                    "fields": block_fields,
-                })
-        
+                block_fields = fields[i : i + 2]
+                blocks.append(
+                    {
+                        "type": "section",
+                        "fields": block_fields,
+                    }
+                )
+
         # 타임스탬프
-        blocks.append({
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"📅 {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
-                }
-            ]
-        })
-        
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"📅 {timestamp.strftime('%Y-%m-%d %H:%M:%S')}",
+                    }
+                ],
+            }
+        )
+
         return {
             "attachments": [
                 {
@@ -219,7 +242,7 @@ class SlackBlockBuilder:
                 }
             ]
         }
-    
+
     @classmethod
     def build_error_notification(
         cls,
@@ -236,57 +259,63 @@ class SlackBlockBuilder:
                     "type": "plain_text",
                     "text": f"❌ {title}",
                     "emoji": True,
-                }
+                },
             },
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": message,
-                }
+                },
             },
         ]
-        
+
         if error:
             error_type = type(error).__name__
             error_msg = str(error)
-            
-            blocks.append({
-                "type": "section",
-                "fields": [
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*Error Type:*\n`{error_type}`",
-                    },
-                    {
-                        "type": "mrkdwn",
-                        "text": f"*Error Message:*\n`{error_msg[:200]}`",
-                    },
-                ]
-            })
-            
+
+            blocks.append(
+                {
+                    "type": "section",
+                    "fields": [
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Error Type:*\n`{error_type}`",
+                        },
+                        {
+                            "type": "mrkdwn",
+                            "text": f"*Error Message:*\n`{error_msg[:200]}`",
+                        },
+                    ],
+                }
+            )
+
             if stack_trace:
                 tb = traceback.format_exception(type(error), error, error.__traceback__)
                 tb_text = "".join(tb)[-1500:]  # 마지막 1500자
-                
-                blocks.append({
-                    "type": "section",
-                    "text": {
-                        "type": "mrkdwn",
-                        "text": f"*Stack Trace:*\n```{tb_text}```",
+
+                blocks.append(
+                    {
+                        "type": "section",
+                        "text": {
+                            "type": "mrkdwn",
+                            "text": f"*Stack Trace:*\n```{tb_text}```",
+                        },
                     }
-                })
-        
-        blocks.append({
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                }
-            ]
-        })
-        
+                )
+
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                    }
+                ],
+            }
+        )
+
         return {
             "attachments": [
                 {
@@ -295,7 +324,7 @@ class SlackBlockBuilder:
                 }
             ]
         }
-    
+
     @classmethod
     def build_daily_report(
         cls,
@@ -307,16 +336,16 @@ class SlackBlockBuilder:
             stats_dict = stats.to_dict()
         else:
             stats_dict = stats
-        
+
         # 성공률 계산
         total_processed = stats_dict.get("articles_analyzed", 0)
         posts_published = stats_dict.get("posts_published", 0)
         errors = stats_dict.get("errors_count", 0)
-        
+
         success_rate = 0
         if total_processed > 0:
             success_rate = ((total_processed - errors) / total_processed) * 100
-        
+
         # 상태 이모지
         if success_rate >= 90:
             status_emoji = "🟢"
@@ -327,7 +356,7 @@ class SlackBlockBuilder:
         else:
             status_emoji = "🔴"
             status_text = "Needs Attention"
-        
+
         blocks = [
             {
                 "type": "header",
@@ -335,14 +364,14 @@ class SlackBlockBuilder:
                     "type": "plain_text",
                     "text": f"📊 TrendOps 일일 리포트 - {date}",
                     "emoji": True,
-                }
+                },
             },
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": f"{status_emoji} *Overall Status:* {status_text} ({success_rate:.1f}%)",
-                }
+                },
             },
             {"type": "divider"},
             {
@@ -356,7 +385,7 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"*📰 기사 수집:*\n{stats_dict.get('articles_collected', 0)}건",
                     },
-                ]
+                ],
             },
             {
                 "type": "section",
@@ -369,7 +398,7 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"*🖼️ 이미지 생성:*\n{stats_dict.get('images_generated', 0)}건",
                     },
-                ]
+                ],
             },
             {
                 "type": "section",
@@ -382,7 +411,7 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"*🚫 발행 거절:*\n{stats_dict.get('posts_rejected', 0)}건",
                     },
-                ]
+                ],
             },
             {"type": "divider"},
             {
@@ -396,7 +425,7 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"*✅ 성공률:*\n{success_rate:.1f}%",
                     },
-                ]
+                ],
             },
             {
                 "type": "context",
@@ -405,10 +434,10 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"Generated at {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                     }
-                ]
+                ],
             },
         ]
-        
+
         # 성공률에 따른 색상
         if success_rate >= 90:
             color = cls.COLORS[NotificationType.SUCCESS]
@@ -416,7 +445,7 @@ class SlackBlockBuilder:
             color = cls.COLORS[NotificationType.WARNING]
         else:
             color = cls.COLORS[NotificationType.FAILURE]
-        
+
         return {
             "attachments": [
                 {
@@ -425,7 +454,7 @@ class SlackBlockBuilder:
                 }
             ]
         }
-    
+
     @classmethod
     def build_pipeline_status(
         cls,
@@ -438,7 +467,7 @@ class SlackBlockBuilder:
         """파이프라인 상태 메시지 빌드"""
         if isinstance(stage, PipelineStage):
             stage = stage.value
-        
+
         # 상태에 따른 이모지와 색상
         status_lower = status.lower()
         if status_lower in ("success", "completed", "done"):
@@ -453,7 +482,7 @@ class SlackBlockBuilder:
         else:
             emoji = "🔄"
             color = cls.COLORS[NotificationType.INFO]
-        
+
         # 단계 이모지
         stage_emojis = {
             "trigger": "🎯",
@@ -464,14 +493,14 @@ class SlackBlockBuilder:
             "publish": "📱",
         }
         stage_emoji = stage_emojis.get(stage.lower(), "⚙️")
-        
+
         blocks = [
             {
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": f"{emoji} *파이프라인 상태*\n*키워드:* `{keyword}`",
-                }
+                },
             },
             {
                 "type": "section",
@@ -484,7 +513,7 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"*상태:*\n{status}",
                     },
-                ]
+                ],
             },
             {
                 "type": "section",
@@ -493,34 +522,40 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"*⏱️ 소요시간:*\n{duration:.2f}s",
                     },
-                ]
+                ],
             },
         ]
-        
+
         if details:
             detail_fields = []
             for key, value in list(details.items())[:4]:  # 최대 4개
-                detail_fields.append({
-                    "type": "mrkdwn",
-                    "text": f"*{key}:*\n{value}",
-                })
-            
+                detail_fields.append(
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*{key}:*\n{value}",
+                    }
+                )
+
             if detail_fields:
-                blocks.append({
-                    "type": "section",
-                    "fields": detail_fields,
-                })
-        
-        blocks.append({
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                }
-            ]
-        })
-        
+                blocks.append(
+                    {
+                        "type": "section",
+                        "fields": detail_fields,
+                    }
+                )
+
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                    }
+                ],
+            }
+        )
+
         return {
             "attachments": [
                 {
@@ -529,7 +564,7 @@ class SlackBlockBuilder:
                 }
             ]
         }
-    
+
     @classmethod
     def build_publish_complete(
         cls,
@@ -547,15 +582,15 @@ class SlackBlockBuilder:
             "facebook": "📘",
         }
         platform_emoji = platform_emojis.get(platform.lower(), "📱")
-        
+
         blocks = [
             {
                 "type": "header",
                 "text": {
                     "type": "plain_text",
-                    "text": f"✅ 발행 완료",
+                    "text": "✅ 발행 완료",
                     "emoji": True,
-                }
+                },
             },
             {
                 "type": "section",
@@ -568,43 +603,51 @@ class SlackBlockBuilder:
                         "type": "mrkdwn",
                         "text": f"*{platform_emoji} 플랫폼:*\n{platform.capitalize()}",
                     },
-                ]
+                ],
             },
         ]
-        
+
         if post_url:
-            blocks.append({
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*🔗 게시물 URL:*\n<{post_url}>",
+            blocks.append(
+                {
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": f"*🔗 게시물 URL:*\n<{post_url}>",
+                    },
                 }
-            })
-        
+            )
+
         if metrics:
             metric_fields = []
             for key, value in list(metrics.items())[:4]:
-                metric_fields.append({
-                    "type": "mrkdwn",
-                    "text": f"*{key}:*\n{value}",
-                })
-            
+                metric_fields.append(
+                    {
+                        "type": "mrkdwn",
+                        "text": f"*{key}:*\n{value}",
+                    }
+                )
+
             if metric_fields:
-                blocks.append({
-                    "type": "section",
-                    "fields": metric_fields,
-                })
-        
-        blocks.append({
-            "type": "context",
-            "elements": [
-                {
-                    "type": "mrkdwn",
-                    "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
-                }
-            ]
-        })
-        
+                blocks.append(
+                    {
+                        "type": "section",
+                        "fields": metric_fields,
+                    }
+                )
+
+        blocks.append(
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": f"📅 {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
+                    }
+                ],
+            }
+        )
+
         return {
             "attachments": [
                 {
@@ -619,30 +662,31 @@ class SlackBlockBuilder:
 # Slack Notifier
 # =============================================================================
 
+
 class SlackNotifier:
     """
     Slack 알림 발송기
-    
+
     Week 5 Day 5: Webhook 기반 알림
-    
+
     Notifications:
     - 파이프라인 성공/실패
     - 발행 완료
     - 에러 알림
     - 일일 리포트
-    
+
     Usage:
         notifier = SlackNotifier(webhook_url="...")
-        
+
         await notifier.send_success(
             title="발행 완료",
             message="트럼프 관세 콘텐츠가 Instagram에 발행되었습니다.",
             details={"post_url": "https://..."},
         )
     """
-    
+
     DEFAULT_TIMEOUT = 30.0
-    
+
     def __init__(
         self,
         webhook_url: str,
@@ -651,7 +695,7 @@ class SlackNotifier:
     ):
         """
         Slack Notifier 초기화
-        
+
         Args:
             webhook_url: Slack Incoming Webhook URL
             timeout: HTTP 요청 타임아웃
@@ -660,11 +704,11 @@ class SlackNotifier:
         self.webhook_url = webhook_url
         self.timeout = timeout
         self.enabled = enabled
-        
+
         self._client: httpx.AsyncClient | None = None
         self._sent_count = 0
         self._error_count = 0
-    
+
     async def _get_client(self) -> httpx.AsyncClient:
         """HTTP 클라이언트 (Lazy initialization)"""
         if self._client is None or self._client.is_closed:
@@ -673,19 +717,19 @@ class SlackNotifier:
                 headers={"Content-Type": "application/json"},
             )
         return self._client
-    
+
     async def close(self) -> None:
         """리소스 정리"""
         if self._client and not self._client.is_closed:
             await self._client.aclose()
             self._client = None
-    
-    async def __aenter__(self) -> "SlackNotifier":
+
+    async def __aenter__(self) -> SlackNotifier:
         return self
-    
+
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
         await self.close()
-    
+
     async def _send_message(self, message: dict[str, Any]) -> NotificationResult:
         """Slack 메시지 전송"""
         if not self.enabled:
@@ -695,15 +739,15 @@ class SlackNotifier:
                 notification_type=NotificationType.INFO,
                 title="Skipped (disabled)",
             )
-        
+
         try:
             client = await self._get_client()
-            
+
             response = await client.post(
                 self.webhook_url,
                 json=message,
             )
-            
+
             if response.status_code == 200:
                 self._sent_count += 1
                 logger.debug("Slack message sent successfully")
@@ -723,7 +767,7 @@ class SlackNotifier:
                     error_message=f"HTTP {response.status_code}: {response.text}",
                     response_code=response.status_code,
                 )
-                
+
         except httpx.TimeoutException as e:
             self._error_count += 1
             logger.error(f"Slack request timeout: {e}")
@@ -742,7 +786,7 @@ class SlackNotifier:
                 title="Error",
                 error_message=str(e),
             )
-    
+
     async def send(
         self,
         notification_type: NotificationType,
@@ -752,13 +796,13 @@ class SlackNotifier:
     ) -> NotificationResult:
         """
         알림 전송
-        
+
         Args:
             notification_type: 알림 타입
             title: 제목
             message: 메시지
             details: 상세 정보
-        
+
         Returns:
             NotificationResult
         """
@@ -768,13 +812,13 @@ class SlackNotifier:
             message=message,
             details=details,
         )
-        
+
         result = await self._send_message(slack_message)
         result.notification_type = notification_type
         result.title = title
-        
+
         return result
-    
+
     async def send_success(
         self,
         title: str,
@@ -788,7 +832,7 @@ class SlackNotifier:
             message=message,
             details=details,
         )
-    
+
     async def send_failure(
         self,
         title: str,
@@ -799,7 +843,7 @@ class SlackNotifier:
     ) -> NotificationResult:
         """
         실패 알림
-        
+
         Args:
             title: 제목
             message: 메시지
@@ -821,13 +865,13 @@ class SlackNotifier:
                 message=message,
                 details=details,
             )
-        
+
         result = await self._send_message(slack_message)
         result.notification_type = NotificationType.FAILURE
         result.title = title
-        
+
         return result
-    
+
     async def send_warning(
         self,
         title: str,
@@ -841,7 +885,7 @@ class SlackNotifier:
             message=message,
             details=details,
         )
-    
+
     async def send_info(
         self,
         title: str,
@@ -855,7 +899,7 @@ class SlackNotifier:
             message=message,
             details=details,
         )
-    
+
     async def send_daily_report(
         self,
         date: str,
@@ -863,7 +907,7 @@ class SlackNotifier:
     ) -> NotificationResult:
         """
         일일 리포트 전송
-        
+
         Args:
             date: 날짜 (YYYY-MM-DD)
             stats: 통계 데이터
@@ -872,13 +916,13 @@ class SlackNotifier:
             date=date,
             stats=stats,
         )
-        
+
         result = await self._send_message(slack_message)
         result.notification_type = NotificationType.INFO
         result.title = f"Daily Report - {date}"
-        
+
         return result
-    
+
     async def send_pipeline_status(
         self,
         keyword: str,
@@ -889,7 +933,7 @@ class SlackNotifier:
     ) -> NotificationResult:
         """
         파이프라인 상태 알림
-        
+
         Args:
             keyword: 트렌드 키워드
             stage: 파이프라인 단계
@@ -904,13 +948,13 @@ class SlackNotifier:
             duration=duration,
             details=details,
         )
-        
+
         result = await self._send_message(slack_message)
         result.notification_type = NotificationType.INFO
         result.title = f"Pipeline: {keyword} - {stage}"
-        
+
         return result
-    
+
     async def send_publish_complete(
         self,
         keyword: str,
@@ -921,7 +965,7 @@ class SlackNotifier:
     ) -> NotificationResult:
         """
         발행 완료 알림
-        
+
         Args:
             keyword: 트렌드 키워드
             platform: 플랫폼 (instagram, threads 등)
@@ -936,20 +980,20 @@ class SlackNotifier:
             image_path=image_path,
             metrics=metrics,
         )
-        
+
         result = await self._send_message(slack_message)
         result.notification_type = NotificationType.SUCCESS
         result.title = f"Published: {keyword} to {platform}"
-        
+
         return result
-    
+
     def get_stats(self) -> dict[str, int]:
         """전송 통계"""
         return {
             "sent_count": self._sent_count,
             "error_count": self._error_count,
         }
-    
+
     def reset_stats(self) -> None:
         """통계 리셋"""
         self._sent_count = 0
@@ -960,23 +1004,24 @@ class SlackNotifier:
 # Factory Functions
 # =============================================================================
 
+
 def create_notifier(
     webhook_url: str | None = None,
     enabled: bool = True,
 ) -> SlackNotifier:
     """
     Notifier 팩토리 함수
-    
+
     환경 변수에서 webhook URL 로드 가능
     """
     import os
-    
+
     webhook_url = webhook_url or os.getenv("SLACK_WEBHOOK_URL", "")
-    
+
     if not webhook_url:
         logger.warning("Slack webhook URL not configured")
         enabled = False
-    
+
     return SlackNotifier(
         webhook_url=webhook_url,
         enabled=enabled,
@@ -987,20 +1032,25 @@ def create_notifier(
 # CLI Interface
 # =============================================================================
 
+
 async def main():
     """CLI 테스트용"""
     import argparse
-    
+
     parser = argparse.ArgumentParser(description="TrendOps Slack Notifier")
     parser.add_argument("--webhook", required=True, help="Slack Webhook URL")
-    parser.add_argument("--type", choices=["success", "failure", "warning", "info"], 
-                       default="info", help="Notification type")
+    parser.add_argument(
+        "--type",
+        choices=["success", "failure", "warning", "info"],
+        default="info",
+        help="Notification type",
+    )
     parser.add_argument("--title", default="Test Notification", help="Title")
     parser.add_argument("--message", default="This is a test message.", help="Message")
     parser.add_argument("--daily-report", action="store_true", help="Send daily report")
-    
+
     args = parser.parse_args()
-    
+
     async with SlackNotifier(webhook_url=args.webhook) as notifier:
         if args.daily_report:
             result = await notifier.send_daily_report(
@@ -1022,7 +1072,7 @@ async def main():
                 title=args.title,
                 message=args.message,
             )
-        
+
         print(f"Result: {'Success' if result.success else 'Failed'}")
         if result.error_message:
             print(f"Error: {result.error_message}")

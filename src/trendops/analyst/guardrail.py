@@ -21,7 +21,7 @@ Blueprint Week 4: Self-Correction Loop의 핵심 컴포넌트
 사용법:
     guardrail = ContentGuardrail()
     result = await guardrail.check(content, keyword="트럼프 관세")
-    
+
     if result.action == GuardrailAction.PASS:
         # 안전한 콘텐츠
         pass
@@ -40,9 +40,10 @@ import json
 import re
 import time
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Callable
+from typing import Any
 from uuid import uuid4
 
 from pydantic import BaseModel, Field
@@ -51,19 +52,19 @@ from pydantic import BaseModel, Field
 try:
     from trendops.schemas import (
         GuardrailAction,
+        GuardrailCheckRequest,
         GuardrailIssue,
         GuardrailIssueType,
         GuardrailResult,
-        GuardrailCheckRequest,
     )
 except ImportError:
     # 단독 실행 시 fallback (테스트용)
     from schemas import (
         GuardrailAction,
+        GuardrailCheckRequest,
         GuardrailIssue,
         GuardrailIssueType,
         GuardrailResult,
-        GuardrailCheckRequest,
     )
 
 
@@ -71,23 +72,25 @@ except ImportError:
 # Configuration
 # =============================================================================
 
+
 @dataclass
 class GuardrailConfig:
     """Guardrail 설정"""
+
     # 검사 모드
     enable_rule_based: bool = True
     enable_llm_based: bool = True
     strict_mode: bool = False  # True면 더 엄격한 검사
-    
+
     # LLM 설정
     llm_model: str = "exaone3.5"
     llm_base_url: str = "http://localhost:11434"
     llm_temperature: float = 0.1  # 일관된 판정을 위해 낮은 temperature
-    
+
     # 임계값
     confidence_threshold: float = 0.7  # 이 이상이면 확신
     auto_revise_threshold: float = 0.5  # 이 이상이면 자동 수정 시도
-    
+
     # 재시도
     max_retries: int = 2
     retry_delay: float = 1.0
@@ -97,9 +100,11 @@ class GuardrailConfig:
 # Rule-Based Patterns (1차 필터)
 # =============================================================================
 
+
 @dataclass
 class PatternRule:
     """패턴 매칭 규칙"""
+
     pattern: re.Pattern
     issue_type: GuardrailIssueType
     severity: str  # low, medium, high, critical
@@ -109,7 +114,7 @@ class PatternRule:
 
 class RulePatterns:
     """검사용 패턴 정의"""
-    
+
     # 욕설/비속어 패턴 (한국어)
     PROFANITY_PATTERNS = [
         r"시[0-9]*발",
@@ -128,7 +133,7 @@ class RulePatterns:
         r"멍청이",
         r"바보같은",
     ]
-    
+
     # 혐오 표현 패턴
     HATE_SPEECH_PATTERNS = [
         r"틀딱",
@@ -143,7 +148,7 @@ class RulePatterns:
         r"짱깨",
         r"깜둥이",
     ]
-    
+
     # 선정적/자극적 표현 패턴
     SENSATIONALISM_PATTERNS = [
         r"충격[\s!]*[적의]?",
@@ -157,7 +162,7 @@ class RulePatterns:
         r"[!]{2,}",  # 느낌표 과다
         r"[?]{2,}",  # 물음표 과다
     ]
-    
+
     # 정치적 편향 키워드 (주의 필요)
     POLITICAL_BIAS_KEYWORDS = [
         # 일방적 평가 표현
@@ -172,7 +177,7 @@ class RulePatterns:
         r"매국노",
         r"종북",
     ]
-    
+
     # 개인정보 패턴
     PERSONAL_INFO_PATTERNS = [
         r"\d{3}[-.\s]?\d{4}[-.\s]?\d{4}",  # 전화번호
@@ -180,7 +185,7 @@ class RulePatterns:
         r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}",  # 이메일
         r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}",  # IP 주소
     ]
-    
+
     # 검증되지 않은 주장 패턴
     UNVERIFIED_CLAIM_PATTERNS = [
         r"확실히\s+~[이가]다",
@@ -190,72 +195,84 @@ class RulePatterns:
         r"누구나\s+알고\s+있",
         r"모두가\s+인정",
     ]
-    
+
     @classmethod
     def get_all_rules(cls) -> list[PatternRule]:
         """모든 패턴 규칙 반환"""
         rules = []
-        
+
         # 욕설
         for pattern in cls.PROFANITY_PATTERNS:
-            rules.append(PatternRule(
-                pattern=re.compile(pattern, re.IGNORECASE),
-                issue_type=GuardrailIssueType.PROFANITY,
-                severity="high",
-                description="욕설 또는 비속어가 포함되어 있습니다.",
-                suggestion="해당 표현을 삭제하거나 순화된 표현으로 수정하세요."
-            ))
-        
+            rules.append(
+                PatternRule(
+                    pattern=re.compile(pattern, re.IGNORECASE),
+                    issue_type=GuardrailIssueType.PROFANITY,
+                    severity="high",
+                    description="욕설 또는 비속어가 포함되어 있습니다.",
+                    suggestion="해당 표현을 삭제하거나 순화된 표현으로 수정하세요.",
+                )
+            )
+
         # 혐오 표현
         for pattern in cls.HATE_SPEECH_PATTERNS:
-            rules.append(PatternRule(
-                pattern=re.compile(pattern, re.IGNORECASE),
-                issue_type=GuardrailIssueType.HATE_SPEECH,
-                severity="critical",
-                description="혐오 발언이 포함되어 있습니다.",
-                suggestion="해당 표현을 완전히 삭제하세요."
-            ))
-        
+            rules.append(
+                PatternRule(
+                    pattern=re.compile(pattern, re.IGNORECASE),
+                    issue_type=GuardrailIssueType.HATE_SPEECH,
+                    severity="critical",
+                    description="혐오 발언이 포함되어 있습니다.",
+                    suggestion="해당 표현을 완전히 삭제하세요.",
+                )
+            )
+
         # 선정적 표현
         for pattern in cls.SENSATIONALISM_PATTERNS:
-            rules.append(PatternRule(
-                pattern=re.compile(pattern, re.IGNORECASE),
-                issue_type=GuardrailIssueType.SENSATIONALISM,
-                severity="medium",
-                description="선정적이거나 자극적인 표현이 포함되어 있습니다.",
-                suggestion="객관적이고 중립적인 표현으로 수정하세요."
-            ))
-        
+            rules.append(
+                PatternRule(
+                    pattern=re.compile(pattern, re.IGNORECASE),
+                    issue_type=GuardrailIssueType.SENSATIONALISM,
+                    severity="medium",
+                    description="선정적이거나 자극적인 표현이 포함되어 있습니다.",
+                    suggestion="객관적이고 중립적인 표현으로 수정하세요.",
+                )
+            )
+
         # 정치적 편향
         for pattern in cls.POLITICAL_BIAS_KEYWORDS:
-            rules.append(PatternRule(
-                pattern=re.compile(pattern, re.IGNORECASE),
-                issue_type=GuardrailIssueType.POLITICAL_BIAS,
-                severity="high",
-                description="정치적으로 편향된 표현이 포함되어 있습니다.",
-                suggestion="중립적 관점에서 사실만을 서술하세요."
-            ))
-        
+            rules.append(
+                PatternRule(
+                    pattern=re.compile(pattern, re.IGNORECASE),
+                    issue_type=GuardrailIssueType.POLITICAL_BIAS,
+                    severity="high",
+                    description="정치적으로 편향된 표현이 포함되어 있습니다.",
+                    suggestion="중립적 관점에서 사실만을 서술하세요.",
+                )
+            )
+
         # 개인정보
         for pattern in cls.PERSONAL_INFO_PATTERNS:
-            rules.append(PatternRule(
-                pattern=re.compile(pattern),
-                issue_type=GuardrailIssueType.PERSONAL_INFO,
-                severity="critical",
-                description="개인정보가 포함되어 있습니다.",
-                suggestion="개인정보를 완전히 삭제하세요."
-            ))
-        
+            rules.append(
+                PatternRule(
+                    pattern=re.compile(pattern),
+                    issue_type=GuardrailIssueType.PERSONAL_INFO,
+                    severity="critical",
+                    description="개인정보가 포함되어 있습니다.",
+                    suggestion="개인정보를 완전히 삭제하세요.",
+                )
+            )
+
         # 검증되지 않은 주장
         for pattern in cls.UNVERIFIED_CLAIM_PATTERNS:
-            rules.append(PatternRule(
-                pattern=re.compile(pattern, re.IGNORECASE),
-                issue_type=GuardrailIssueType.UNVERIFIED_CLAIM,
-                severity="medium",
-                description="검증되지 않은 주장이 포함되어 있습니다.",
-                suggestion="'~한 것으로 알려졌다', '~라는 의견이 있다' 형태로 수정하세요."
-            ))
-        
+            rules.append(
+                PatternRule(
+                    pattern=re.compile(pattern, re.IGNORECASE),
+                    issue_type=GuardrailIssueType.UNVERIFIED_CLAIM,
+                    severity="medium",
+                    description="검증되지 않은 주장이 포함되어 있습니다.",
+                    suggestion="'~한 것으로 알려졌다', '~라는 의견이 있다' 형태로 수정하세요.",
+                )
+            )
+
         return rules
 
 
@@ -263,9 +280,10 @@ class RulePatterns:
 # Checker Interface
 # =============================================================================
 
+
 class BaseChecker(ABC):
     """검사기 추상 클래스"""
-    
+
     @abstractmethod
     async def check(
         self,
@@ -275,12 +293,12 @@ class BaseChecker(ABC):
     ) -> list[GuardrailIssue]:
         """
         콘텐츠 검사 수행
-        
+
         Returns:
             발견된 이슈 목록
         """
         pass
-    
+
     @abstractmethod
     def get_name(self) -> str:
         """검사기 이름"""
@@ -291,20 +309,21 @@ class BaseChecker(ABC):
 # Rule-Based Checker (1차 필터)
 # =============================================================================
 
+
 class RuleBasedChecker(BaseChecker):
     """
     규칙 기반 검사기
-    
+
     정규식 패턴 매칭을 통한 빠른 1차 필터링
     - 장점: 빠름, 확정적, 리소스 적음
     - 단점: 문맥 파악 불가, 우회 가능
     """
-    
+
     def __init__(self, custom_rules: list[PatternRule] | None = None):
         self.rules = RulePatterns.get_all_rules()
         if custom_rules:
             self.rules.extend(custom_rules)
-    
+
     async def check(
         self,
         content: str,
@@ -313,7 +332,7 @@ class RuleBasedChecker(BaseChecker):
     ) -> list[GuardrailIssue]:
         """규칙 기반 검사 수행"""
         issues = []
-        
+
         for rule in self.rules:
             matches = rule.pattern.findall(content)
             if matches:
@@ -324,17 +343,19 @@ class RuleBasedChecker(BaseChecker):
                     start = max(0, match.start() - 20)
                     end = min(len(content), match.end() + 20)
                     location = f"...{content[start:end]}..."
-                
-                issues.append(GuardrailIssue(
-                    issue_type=rule.issue_type,
-                    severity=rule.severity,
-                    description=rule.description,
-                    location=location,
-                    suggestion=rule.suggestion,
-                ))
-        
+
+                issues.append(
+                    GuardrailIssue(
+                        issue_type=rule.issue_type,
+                        severity=rule.severity,
+                        description=rule.description,
+                        location=location,
+                        suggestion=rule.suggestion,
+                    )
+                )
+
         return issues
-    
+
     def get_name(self) -> str:
         return "rule-based-checker"
 
@@ -343,8 +364,10 @@ class RuleBasedChecker(BaseChecker):
 # LLM-Based Checker (2차 검증)
 # =============================================================================
 
+
 class LLMGuardrailOutput(BaseModel):
     """LLM Guardrail 출력 스키마"""
+
     is_safe: bool = Field(..., description="콘텐츠 안전 여부")
     confidence: float = Field(..., ge=0.0, le=1.0, description="판정 신뢰도")
     issues: list[dict] = Field(default_factory=list, description="발견된 이슈 목록")
@@ -420,12 +443,12 @@ LLM_GUARDRAIL_SYSTEM_PROMPT = """당신은 콘텐츠 검수 전문가입니다.
 class LLMBasedChecker(BaseChecker):
     """
     LLM 기반 검사기
-    
+
     LLM을 사용한 심층적 문맥 이해 검사
     - 장점: 문맥 이해, 뉘앙스 파악
     - 단점: 느림, 비용, 비확정적
     """
-    
+
     def __init__(
         self,
         model_name: str = "qwen2.5:7b-instruct",
@@ -436,17 +459,18 @@ class LLMBasedChecker(BaseChecker):
         self.base_url = base_url
         self.temperature = temperature
         self._client = None
-    
+
     def _get_client(self):
         """Ollama 클라이언트 lazy loading"""
         if self._client is None:
             try:
                 from ollama import AsyncClient
+
                 self._client = AsyncClient(host=self.base_url)
             except ImportError:
                 raise ImportError("ollama 라이브러리가 필요합니다: pip install ollama")
         return self._client
-    
+
     async def check(
         self,
         content: str,
@@ -455,7 +479,7 @@ class LLMBasedChecker(BaseChecker):
     ) -> list[GuardrailIssue]:
         """LLM 기반 검사 수행"""
         client = self._get_client()
-        
+
         # 프롬프트 구성
         user_prompt = f"""## 검토 대상 콘텐츠:
 {content}
@@ -463,12 +487,12 @@ class LLMBasedChecker(BaseChecker):
 """
         if keyword:
             user_prompt += f"## 관련 키워드: {keyword}\n\n"
-        
+
         if strict_mode:
             user_prompt += "## 모드: 엄격 검사 (의심스러운 표현도 이슈로 보고)\n\n"
-        
+
         user_prompt += "위 콘텐츠를 검토하고 JSON 형식으로 결과를 제공하세요."
-        
+
         try:
             response = await client.chat(
                 model=self.model_name,
@@ -482,10 +506,10 @@ class LLMBasedChecker(BaseChecker):
                     "num_predict": 2048,
                 },
             )
-            
+
             result_text = response["message"]["content"]
             result_data = json.loads(result_text)
-            
+
             # 이슈 파싱
             issues = []
             for issue_data in result_data.get("issues", []):
@@ -493,30 +517,32 @@ class LLMBasedChecker(BaseChecker):
                     issue_type = GuardrailIssueType(issue_data.get("type", "unknown"))
                 except ValueError:
                     issue_type = GuardrailIssueType.UNVERIFIED_CLAIM  # fallback
-                
-                issues.append(GuardrailIssue(
-                    issue_type=issue_type,
-                    severity=issue_data.get("severity", "medium"),
-                    description=issue_data.get("description", ""),
-                    location=issue_data.get("location"),
-                    suggestion=issue_data.get("suggestion"),
-                ))
-            
+
+                issues.append(
+                    GuardrailIssue(
+                        issue_type=issue_type,
+                        severity=issue_data.get("severity", "medium"),
+                        description=issue_data.get("description", ""),
+                        location=issue_data.get("location"),
+                        suggestion=issue_data.get("suggestion"),
+                    )
+                )
+
             # 추가 메타데이터 저장 (나중에 사용)
             self._last_result = result_data
-            
+
             return issues
-            
+
         except Exception as e:
             # LLM 실패 시 빈 결과 반환 (Rule-based만 사용)
             print(f"[WARNING] LLM Guardrail 실패: {e}")
             self._last_result = None
             return []
-    
+
     def get_last_result(self) -> dict | None:
         """마지막 LLM 검사 결과 반환"""
         return getattr(self, "_last_result", None)
-    
+
     def get_name(self) -> str:
         return f"llm-checker:{self.model_name}"
 
@@ -525,13 +551,14 @@ class LLMBasedChecker(BaseChecker):
 # Mock Checker (테스트용)
 # =============================================================================
 
+
 class MockLLMChecker(BaseChecker):
     """
     테스트용 Mock LLM 검사기
-    
+
     Ollama 없이 테스트할 때 사용
     """
-    
+
     # 테스트용 응답 정의
     MOCK_RESPONSES: dict[str, list[dict]] = {
         "정치적편향테스트": [
@@ -539,7 +566,7 @@ class MockLLMChecker(BaseChecker):
                 "type": "political_bias",
                 "severity": "high",
                 "description": "정치적으로 편향된 표현이 포함되어 있습니다.",
-                "suggestion": "중립적 표현으로 수정하세요."
+                "suggestion": "중립적 표현으로 수정하세요.",
             }
         ],
         "욕설테스트": [
@@ -547,11 +574,11 @@ class MockLLMChecker(BaseChecker):
                 "type": "profanity",
                 "severity": "critical",
                 "description": "욕설이 포함되어 있습니다.",
-                "suggestion": "해당 표현을 삭제하세요."
+                "suggestion": "해당 표현을 삭제하세요.",
             }
         ],
     }
-    
+
     async def check(
         self,
         content: str,
@@ -560,21 +587,23 @@ class MockLLMChecker(BaseChecker):
     ) -> list[GuardrailIssue]:
         """Mock 검사 수행"""
         await asyncio.sleep(0.1)  # 시뮬레이션
-        
+
         issues = []
-        
+
         # 키워드별 Mock 응답
         if keyword and keyword in self.MOCK_RESPONSES:
             for issue_data in self.MOCK_RESPONSES[keyword]:
-                issues.append(GuardrailIssue(
-                    issue_type=GuardrailIssueType(issue_data["type"]),
-                    severity=issue_data["severity"],
-                    description=issue_data["description"],
-                    suggestion=issue_data.get("suggestion"),
-                ))
-        
+                issues.append(
+                    GuardrailIssue(
+                        issue_type=GuardrailIssueType(issue_data["type"]),
+                        severity=issue_data["severity"],
+                        description=issue_data["description"],
+                        suggestion=issue_data.get("suggestion"),
+                    )
+                )
+
         return issues
-    
+
     def get_name(self) -> str:
         return "mock-llm-checker"
 
@@ -583,18 +612,19 @@ class MockLLMChecker(BaseChecker):
 # Content Guardrail (통합 클래스)
 # =============================================================================
 
+
 class ContentGuardrail:
     """
     콘텐츠 안전성 검증 통합 클래스
-    
+
     Blueprint Week 4: 2-Stage Guardrail
     - Stage 1: Rule-based 빠른 필터링
     - Stage 2: LLM 기반 심층 검사
-    
+
     Usage:
         guardrail = ContentGuardrail()
         result = await guardrail.check(content, keyword="트럼프 관세")
-        
+
         if result.action == GuardrailAction.PASS:
             print("안전한 콘텐츠")
         elif result.action == GuardrailAction.REVISE:
@@ -602,7 +632,7 @@ class ContentGuardrail:
         else:
             print(f"거부됨: {result.issue_summary}")
     """
-    
+
     def __init__(
         self,
         config: GuardrailConfig | None = None,
@@ -614,15 +644,15 @@ class ContentGuardrail:
             use_mock: True면 Mock LLM 사용 (테스트용)
         """
         self.config = config or GuardrailConfig()
-        
+
         # 검사기 초기화
         self._rule_checker: BaseChecker | None = None
         self._llm_checker: BaseChecker | None = None
         self._use_mock = use_mock
-        
+
         if self.config.enable_rule_based:
             self._rule_checker = RuleBasedChecker()
-        
+
         if self.config.enable_llm_based:
             if use_mock:
                 self._llm_checker = MockLLMChecker()
@@ -632,7 +662,7 @@ class ContentGuardrail:
                     base_url=self.config.llm_base_url,
                     temperature=self.config.llm_temperature,
                 )
-    
+
     async def check(
         self,
         content: str,
@@ -642,30 +672,30 @@ class ContentGuardrail:
     ) -> GuardrailResult:
         """
         콘텐츠 안전성 검사 수행
-        
+
         Args:
             content: 검사할 콘텐츠
             keyword: 관련 키워드 (컨텍스트 제공)
             content_type: 콘텐츠 유형 (summary, opinion, full)
             strict_mode: 엄격 모드 (None이면 config 따름)
-        
+
         Returns:
             GuardrailResult: 검사 결과
         """
         if strict_mode is None:
             strict_mode = self.config.strict_mode
-        
+
         content_id = f"guardrail-{uuid4().hex[:8]}"
         all_issues: list[GuardrailIssue] = []
-        
+
         # Stage 1: Rule-based 검사
         if self._rule_checker:
             rule_issues = await self._rule_checker.check(content, keyword, strict_mode)
             all_issues.extend(rule_issues)
-        
+
         # Stage 2: LLM 기반 검사 (Rule-based에서 critical 없을 때만)
         has_critical = any(i.severity == "critical" for i in all_issues)
-        
+
         if self._llm_checker and not has_critical:
             llm_issues = await self._llm_checker.check(content, keyword, strict_mode)
             # 중복 제거 (같은 issue_type은 하나만)
@@ -673,19 +703,19 @@ class ContentGuardrail:
             for issue in llm_issues:
                 if issue.issue_type not in existing_types:
                     all_issues.append(issue)
-        
+
         # 결과 판정
         action, is_safe, confidence = self._determine_action(all_issues)
-        
+
         # 수정 시도 (REVISE일 때)
         revised_content = None
         review_reason = None
-        
+
         if action == GuardrailAction.REVISE:
             revised_content = await self._attempt_revision(content, all_issues)
         elif action == GuardrailAction.REVIEW:
             review_reason = self._generate_review_reason(all_issues)
-        
+
         return GuardrailResult(
             content_id=content_id,
             action=action,
@@ -696,55 +726,50 @@ class ContentGuardrail:
             revised_content=revised_content,
             review_reason=review_reason,
         )
-    
+
     def _determine_action(
-        self,
-        issues: list[GuardrailIssue]
+        self, issues: list[GuardrailIssue]
     ) -> tuple[GuardrailAction, bool, float]:
         """
         이슈 목록을 기반으로 액션 결정
-        
+
         Returns:
             (action, is_safe, confidence)
         """
         if not issues:
             return GuardrailAction.PASS, True, 0.95
-        
+
         # 심각도별 분류
         critical_count = sum(1 for i in issues if i.severity == "critical")
         high_count = sum(1 for i in issues if i.severity == "high")
         medium_count = sum(1 for i in issues if i.severity == "medium")
         low_count = sum(1 for i in issues if i.severity == "low")
-        
+
         # Critical이 있으면 무조건 REJECT
         if critical_count > 0:
             return GuardrailAction.REJECT, False, 0.99
-        
+
         # High가 있으면 REVIEW (사람 검토 필요)
         if high_count > 0:
             if high_count >= 2:
                 return GuardrailAction.REJECT, False, 0.90
             return GuardrailAction.REVIEW, False, 0.80
-        
+
         # Medium만 있으면 REVISE 시도
         if medium_count > 0:
             confidence = max(0.6, 0.9 - medium_count * 0.1)
             return GuardrailAction.REVISE, False, confidence
-        
+
         # Low만 있으면 PASS (경고만)
         if low_count > 0:
             return GuardrailAction.PASS, True, 0.85
-        
+
         return GuardrailAction.PASS, True, 0.95
-    
-    async def _attempt_revision(
-        self,
-        content: str,
-        issues: list[GuardrailIssue]
-    ) -> str | None:
+
+    async def _attempt_revision(self, content: str, issues: list[GuardrailIssue]) -> str | None:
         """자동 수정 시도"""
         revised = content
-        
+
         for issue in issues:
             if issue.issue_type == GuardrailIssueType.SENSATIONALISM:
                 # 느낌표/물음표 과다 수정
@@ -753,17 +778,17 @@ class ContentGuardrail:
                 # 자극적 표현 순화
                 revised = re.sub(r"충격[\s!]*[적의]?", "주목할 만한 ", revised)
                 revised = re.sub(r"경악", "놀라운", revised)
-            
+
             elif issue.issue_type == GuardrailIssueType.UNVERIFIED_CLAIM:
                 # 단정적 표현 → 추정 표현
                 revised = re.sub(r"확실히\s+", "~한 것으로 알려진 ", revised)
                 revised = re.sub(r"틀림없이\s+", "~한 것으로 보이는 ", revised)
-        
+
         # 수정이 실제로 이루어졌는지 확인
         if revised != content:
             return revised
         return None
-    
+
     def _generate_review_reason(self, issues: list[GuardrailIssue]) -> str:
         """검토 필요 사유 생성"""
         reasons = []
@@ -771,7 +796,7 @@ class ContentGuardrail:
             if issue.severity in ("high", "critical"):
                 reasons.append(f"- {issue.issue_type.value}: {issue.description}")
         return "\n".join(reasons) if reasons else "수동 검토가 필요합니다."
-    
+
     async def check_batch(
         self,
         contents: list[str],
@@ -786,6 +811,7 @@ class ContentGuardrail:
 # Convenience Functions
 # =============================================================================
 
+
 async def check_content_safety(
     content: str,
     keyword: str | None = None,
@@ -794,7 +820,7 @@ async def check_content_safety(
 ) -> GuardrailResult:
     """
     콘텐츠 안전성 검사 편의 함수
-    
+
     Usage:
         result = await check_content_safety(
             content="트럼프 대통령이 관세 정책을 발표했습니다.",
@@ -812,12 +838,13 @@ async def check_content_safety(
 # =============================================================================
 
 if __name__ == "__main__":
+
     async def main():
         """테스트 실행"""
         print("\n" + "=" * 70)
         print("  Week 4 Day 3: Guardrail Test")
         print("=" * 70)
-        
+
         # 테스트 케이스
         test_cases = [
             {
@@ -846,33 +873,35 @@ if __name__ == "__main__":
                 "expected_safe": False,
             },
         ]
-        
+
         # Mock 모드로 테스트 (Ollama 없이)
         guardrail = ContentGuardrail(use_mock=True)
-        
+
         for i, test in enumerate(test_cases, 1):
             print(f"\n{'─' * 60}")
             print(f"Test {i}: {test['name']}")
             print(f"{'─' * 60}")
             print(f"Content: {test['content'][:60]}...")
-            
+
             result = await guardrail.check(test["content"], keyword="테스트")
-            
+
             status = "✅" if result.is_safe == test["expected_safe"] else "❌"
             print(f"\n{status} Result:")
             print(f"   Action: {result.action.value}")
             print(f"   Safe: {result.is_safe}")
             print(f"   Confidence: {result.confidence:.2f}")
             print(f"   Issues: {len(result.issues)}")
-            
+
             for issue in result.issues:
-                print(f"     - [{issue.severity}] {issue.issue_type.value}: {issue.description[:40]}...")
-            
+                print(
+                    f"     - [{issue.severity}] {issue.issue_type.value}: {issue.description[:40]}..."
+                )
+
             if result.revised_content:
                 print(f"   Revised: {result.revised_content[:60]}...")
-        
+
         print("\n" + "=" * 70)
         print("  Test Complete!")
         print("=" * 70)
-    
+
     asyncio.run(main())

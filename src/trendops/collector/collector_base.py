@@ -1,10 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Any, List
-from pydantic import BaseModel, Field
 from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel, Field
+
 
 class TrendDocument(BaseModel):
     """모든 수집기가 반환해야 하는 표준 문서 포맷"""
+
     title: str
     link: str
     published: datetime | None = None
@@ -12,12 +15,13 @@ class TrendDocument(BaseModel):
     keyword: str = ""
     source: str = "unknown"
     content: str = ""  # 본문 전체 (옵션)
-    metadata: dict[str, Any] = Field(default_factory=dict) # 조회수, 좋아요 등 추가 정보
+    metadata: dict[str, Any] = Field(default_factory=dict)  # 조회수, 좋아요 등 추가 정보
 
     @property
     def text_to_embed(self) -> str:
         """임베딩용 텍스트 반환 (제목 + 요약)"""
         return f"{self.title} {self.summary}"
+
 
 class BaseCollector(ABC):
     """모든 수집기의 부모 클래스"""
@@ -32,7 +36,7 @@ class BaseCollector(ABC):
         await self.close()
 
     @abstractmethod
-    async def fetch(self, keyword: str, **kwargs) -> List[TrendDocument]:
+    async def fetch(self, keyword: str, **kwargs) -> list[TrendDocument]:
         """키워드로 데이터를 수집하여 표준 문서 리스트를 반환"""
         pass
 

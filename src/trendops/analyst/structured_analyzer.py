@@ -21,7 +21,6 @@ import re
 import time
 from abc import ABC, abstractmethod
 from datetime import datetime
-from enum import Enum
 from typing import Any, TypeVar
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
@@ -30,17 +29,19 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 # Pydantic Schemas (analyzer_llm.py와 호환)
 # =============================================================================
 
+
 class SentimentRatio(BaseModel):
     """감성 비율 스키마"""
+
     positive: float = Field(..., ge=0.0, le=1.0, description="긍정 비율")
     negative: float = Field(..., ge=0.0, le=1.0, description="부정 비율")
     neutral: float = Field(..., ge=0.0, le=1.0, description="중립 비율")
-    
+
     @field_validator("positive", "negative", "neutral", mode="after")
     @classmethod
     def round_ratio(cls, v: float) -> float:
         return round(v, 2)
-    
+
     def model_post_init(self, __context: Any) -> None:
         """비율 합이 1.0이 되도록 정규화"""
         total = self.positive + self.negative + self.neutral
@@ -53,35 +54,21 @@ class SentimentRatio(BaseModel):
 class AnalysisOutput(BaseModel):
     """
     LLM 분석 출력 스키마 (Outlines용)
-    
+
     Week 4: Outlines가 이 스키마를 기반으로 JSON 문법 강제
     """
+
     main_cause: str = Field(
-        ..., 
-        min_length=10,
-        max_length=200,
-        description="이 키워드가 뜬 핵심 원인 (1문장)"
+        ..., min_length=10, max_length=200, description="이 키워드가 뜬 핵심 원인 (1문장)"
     )
-    sentiment_ratio: SentimentRatio = Field(
-        ...,
-        description="여론 감성 비율"
-    )
-    key_opinions: list[str] = Field(
-        ...,
-        min_length=3,
-        max_length=5,
-        description="핵심 의견 3-5개"
-    )
-    summary: str = Field(
-        ...,
-        min_length=50,
-        max_length=300,
-        description="3줄 요약"
-    )
+    sentiment_ratio: SentimentRatio = Field(..., description="여론 감성 비율")
+    key_opinions: list[str] = Field(..., min_length=3, max_length=5, description="핵심 의견 3-5개")
+    summary: str = Field(..., min_length=50, max_length=300, description="3줄 요약")
 
 
 class AnalysisResult(BaseModel):
     """분석 결과 전체 스키마"""
+
     keyword: str = Field(..., description="분석 대상 키워드")
     analysis: AnalysisOutput = Field(..., description="LLM 분석 결과")
     source_count: int = Field(..., ge=0, description="분석에 사용된 소스 수")
@@ -89,7 +76,7 @@ class AnalysisResult(BaseModel):
     inference_time_seconds: float = Field(..., ge=0, description="추론 소요 시간")
     generation_method: str = Field(default="outlines", description="생성 방식")
     created_at: datetime = Field(default_factory=datetime.now, description="생성 시간")
-    
+
     def is_valid(self) -> bool:
         """분석 결과 유효성 검사"""
         return (
@@ -149,7 +136,7 @@ T = TypeVar("T", bound=BaseModel)
 
 class GenerationBackend(ABC):
     """생성 백엔드 추상 클래스"""
-    
+
     @abstractmethod
     async def generate(
         self,
@@ -159,7 +146,7 @@ class GenerationBackend(ABC):
     ) -> T:
         """스키마에 맞는 구조화된 출력 생성"""
         pass
-    
+
     @abstractmethod
     def get_name(self) -> str:
         """백엔드 이름 반환"""
@@ -169,10 +156,10 @@ class GenerationBackend(ABC):
 class OutlinesOllamaBackend(GenerationBackend):
     """
     Outlines + Ollama 백엔드
-    
+
     JSON 문법을 강제하여 100% 유효한 JSON 출력 보장
     """
-    
+
     def __init__(
         self,
         model_name: str = "exaone3.5",
@@ -182,52 +169,51 @@ class OutlinesOllamaBackend(GenerationBackend):
         self.base_url = base_url
         self._model = None
         self._generator_cache: dict[type, Any] = {}
-    
+
     def _get_model(self):
-            """Outlines 모델 lazy loading (호환성 개선 패치)"""
-            if self._model is None:
-                try:
-                    from outlines import models
-                    
-                    # 1. models.ollama가 존재하는지 확인 (최신 버전 outlines)
-                    if hasattr(models, 'ollama'):
-                        self._model = models.ollama(
-                            self.model_name,
-                            base_url=self.base_url,
-                        )
-                    # 2. 없다면 OpenAI 호환 모드로 연결 (구버전 outlines 대응)
-                    # Ollama는 http://localhost:11434/v1 에서 OpenAI API와 호환됩니다.
-                    else:
-                        # URL 끝에 /v1이 없으면 추가
-                        base_url = self.base_url.rstrip('/')
-                        if not base_url.endswith('/v1'):
-                            base_url += '/v1'
-                        
-                        self._model = models.openai(
-                            self.model_name,
-                            base_url=base_url,
-                            api_key="ollama",  # 더미 키 (Ollama는 키 검사 안함)
-                        )
-                        
-                except ImportError:
-                    raise ImportError(
-                        "outlines 라이브러리가 필요합니다: pip install outlines"
+        """Outlines 모델 lazy loading (호환성 개선 패치)"""
+        if self._model is None:
+            try:
+                from outlines import models
+
+                # 1. models.ollama가 존재하는지 확인 (최신 버전 outlines)
+                if hasattr(models, "ollama"):
+                    self._model = models.ollama(
+                        self.model_name,
+                        base_url=self.base_url,
                     )
-                except Exception as e:
-                    # 상세 에러 로깅
-                    print(f"[DEBUG] Outlines Init Error: {e}")
-                    raise RuntimeError(f"Ollama 모델 로드 실패: {e}")
-                    
-            return self._model
-    
+                # 2. 없다면 OpenAI 호환 모드로 연결 (구버전 outlines 대응)
+                # Ollama는 http://localhost:11434/v1 에서 OpenAI API와 호환됩니다.
+                else:
+                    # URL 끝에 /v1이 없으면 추가
+                    base_url = self.base_url.rstrip("/")
+                    if not base_url.endswith("/v1"):
+                        base_url += "/v1"
+
+                    self._model = models.openai(
+                        self.model_name,
+                        base_url=base_url,
+                        api_key="ollama",  # 더미 키 (Ollama는 키 검사 안함)
+                    )
+
+            except ImportError:
+                raise ImportError("outlines 라이브러리가 필요합니다: pip install outlines")
+            except Exception as e:
+                # 상세 에러 로깅
+                print(f"[DEBUG] Outlines Init Error: {e}")
+                raise RuntimeError(f"Ollama 모델 로드 실패: {e}")
+
+        return self._model
+
     def _get_generator(self, schema: type[T]):
         """스키마별 generator 캐싱"""
         if schema not in self._generator_cache:
             from outlines import generate
+
             model = self._get_model()
             self._generator_cache[schema] = generate.json(model, schema)
         return self._generator_cache[schema]
-    
+
     async def generate(
         self,
         prompt: str,
@@ -236,12 +222,12 @@ class OutlinesOllamaBackend(GenerationBackend):
     ) -> T:
         """Outlines를 사용한 구조화된 JSON 생성"""
         generator = self._get_generator(schema)
-        
+
         # 시스템 프롬프트와 사용자 프롬프트 결합
         full_prompt = prompt
         if system_prompt:
             full_prompt = f"{system_prompt}\n\n{prompt}"
-        
+
         # Outlines는 동기 함수이므로 executor에서 실행
         loop = asyncio.get_event_loop()
         result = await loop.run_in_executor(
@@ -249,9 +235,9 @@ class OutlinesOllamaBackend(GenerationBackend):
             generator,
             full_prompt,
         )
-        
+
         return result
-    
+
     def get_name(self) -> str:
         return f"outlines-ollama:{self.model_name}"
 
@@ -259,11 +245,11 @@ class OutlinesOllamaBackend(GenerationBackend):
 class OllamaJsonModeBackend(GenerationBackend):
     """
     Ollama JSON 모드 백엔드 (Fallback)
-    
+
     Ollama의 native JSON 모드 + Pydantic validation
     Outlines가 실패할 경우 사용
     """
-    
+
     def __init__(
         self,
         model_name: str = "exaone3.5",
@@ -274,19 +260,18 @@ class OllamaJsonModeBackend(GenerationBackend):
         self.base_url = base_url
         self.max_retries = max_retries
         self._client = None
-    
+
     def _get_client(self):
         """Ollama 클라이언트 lazy loading"""
         if self._client is None:
             try:
                 from ollama import AsyncClient
+
                 self._client = AsyncClient(host=self.base_url)
             except ImportError:
-                raise ImportError(
-                    "ollama 라이브러리가 필요합니다: pip install ollama"
-                )
+                raise ImportError("ollama 라이브러리가 필요합니다: pip install ollama")
         return self._client
-    
+
     async def generate(
         self,
         prompt: str,
@@ -295,14 +280,14 @@ class OllamaJsonModeBackend(GenerationBackend):
     ) -> T:
         """Ollama JSON 모드를 사용한 생성 + Pydantic 검증"""
         client = self._get_client()
-        
+
         messages = []
         if system_prompt:
             messages.append({"role": "system", "content": system_prompt})
         messages.append({"role": "user", "content": prompt})
-        
+
         last_error: Exception | None = None
-        
+
         for attempt in range(self.max_retries):
             try:
                 response = await client.chat(
@@ -314,9 +299,9 @@ class OllamaJsonModeBackend(GenerationBackend):
                         "num_predict": 2048,
                     },
                 )
-                
+
                 content = response["message"]["content"]
-                
+
                 # JSON 파싱 시도
                 try:
                     data = json.loads(content)
@@ -333,10 +318,10 @@ class OllamaJsonModeBackend(GenerationBackend):
                             data = json.loads(content[json_start:json_end])
                         else:
                             raise ValueError("JSON을 찾을 수 없습니다")
-                
+
                 # Pydantic 검증
                 return schema.model_validate(data)
-                
+
             except (json.JSONDecodeError, ValidationError) as e:
                 last_error = e
                 # 에러 피드백과 함께 재시도
@@ -348,11 +333,9 @@ class OllamaJsonModeBackend(GenerationBackend):
             except Exception as e:
                 last_error = e
                 break
-        
-        raise RuntimeError(
-            f"JSON 생성 실패 (시도 {self.max_retries}회): {last_error}"
-        )
-    
+
+        raise RuntimeError(f"JSON 생성 실패 (시도 {self.max_retries}회): {last_error}")
+
     def get_name(self) -> str:
         return f"ollama-json:{self.model_name}"
 
@@ -361,20 +344,21 @@ class OllamaJsonModeBackend(GenerationBackend):
 # Structured Analyzer (Main Class)
 # =============================================================================
 
+
 class StructuredAnalyzer:
     """
     Week 4 핵심: 구조화된 출력 보장 분석기
-    
+
     특징:
     1. Outlines를 사용한 JSON 문법 강제 (Primary)
     2. Ollama JSON 모드 fallback (Secondary)
     3. 기존 analyzer_llm.py와 완전 호환
-    
+
     Usage:
         async with StructuredAnalyzer() as analyzer:
             result = await analyzer.analyze(keyword, articles)
     """
-    
+
     def __init__(
         self,
         model_name: str = "exaone3.5",
@@ -390,17 +374,17 @@ class StructuredAnalyzer:
         self.model_name = model_name
         self.base_url = base_url
         self.use_outlines = use_outlines
-        
+
         # 백엔드 초기화
         self._primary_backend: GenerationBackend | None = None
         self._fallback_backend: GenerationBackend | None = None
         self._backend_initialized = False
-    
+
     def _init_backends(self) -> None:
         """백엔드 lazy 초기화"""
         if self._backend_initialized:
             return
-        
+
         # Primary: Outlines + Ollama
         if self.use_outlines:
             try:
@@ -411,37 +395,37 @@ class StructuredAnalyzer:
             except ImportError:
                 print("[WARNING] Outlines 사용 불가, JSON 모드로 fallback")
                 self._primary_backend = None
-        
+
         # Fallback: Ollama JSON 모드
         self._fallback_backend = OllamaJsonModeBackend(
             model_name=self.model_name,
             base_url=self.base_url,
         )
-        
+
         self._backend_initialized = True
-    
+
     def _build_context(self, articles: list[dict[str, Any]]) -> str:
         """뉴스 기사 목록을 컨텍스트 문자열로 변환"""
         context_parts = []
-        
+
         for i, article in enumerate(articles[:15], 1):  # 최대 15개
             title = article.get("title", "제목 없음")
             summary = article.get("summary") or article.get("description", "")
             source = article.get("source", "알 수 없음")
             published = article.get("published") or article.get("published_at", "")
-            
+
             # 요약이 너무 길면 자르기
             if len(summary) > 300:
                 summary = summary[:300] + "..."
-            
+
             context_parts.append(
                 f"[{i}] {title}\n"
                 f"    출처: {source} | 발행: {published}\n"
                 f"    요약: {summary}"
             )
-        
+
         return "\n\n".join(context_parts)
-    
+
     async def analyze(
         self,
         keyword: str,
@@ -449,30 +433,30 @@ class StructuredAnalyzer:
     ) -> AnalysisResult:
         """
         뉴스 기사들을 분석하여 구조화된 결과 반환
-        
+
         Args:
             keyword: 분석 대상 키워드
             articles: 뉴스 기사 목록
-        
+
         Returns:
             AnalysisResult: 100% 유효한 구조화된 분석 결과
         """
         if not articles:
             raise ValueError("분석할 기사가 없습니다")
-        
+
         if not keyword or not keyword.strip():
             raise ValueError("키워드가 비어있습니다")
-        
+
         self._init_backends()
-        
+
         # 컨텍스트 구성
         context = self._build_context(articles)
         prompt = build_user_prompt(keyword, context)
-        
+
         start_time = time.time()
         analysis: AnalysisOutput | None = None
         backend_used = ""
-        
+
         # Primary 백엔드 시도
         if self._primary_backend is not None:
             try:
@@ -484,7 +468,7 @@ class StructuredAnalyzer:
                 backend_used = self._primary_backend.get_name()
             except Exception as e:
                 print(f"[WARNING] Primary 백엔드 실패: {e}")
-        
+
         # Fallback 백엔드 시도
         if analysis is None and self._fallback_backend is not None:
             try:
@@ -496,12 +480,12 @@ class StructuredAnalyzer:
                 backend_used = self._fallback_backend.get_name()
             except Exception as e:
                 raise RuntimeError(f"모든 백엔드 실패: {e}")
-        
+
         if analysis is None:
             raise RuntimeError("분석 생성 실패: 사용 가능한 백엔드가 없습니다")
-        
+
         inference_time = time.time() - start_time
-        
+
         return AnalysisResult(
             keyword=keyword,
             analysis=analysis,
@@ -510,14 +494,14 @@ class StructuredAnalyzer:
             inference_time_seconds=round(inference_time, 2),
             generation_method=backend_used,
         )
-    
+
     async def analyze_from_collection_result(
         self,
         collection_result: Any,
     ) -> AnalysisResult:
         """
         CollectionResult 객체로부터 직접 분석 수행
-        
+
         collector_rss_google.py의 CollectionResult와 연동
         """
         articles = [
@@ -529,19 +513,19 @@ class StructuredAnalyzer:
             }
             for article in collection_result.articles
         ]
-        
+
         return await self.analyze(
             keyword=collection_result.keyword,
             articles=articles,
         )
-    
+
     async def close(self) -> None:
         """리소스 정리"""
         pass  # 현재 특별한 정리 불필요
-    
-    async def __aenter__(self) -> "StructuredAnalyzer":
+
+    async def __aenter__(self) -> StructuredAnalyzer:
         return self
-    
+
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.close()
 
@@ -550,6 +534,7 @@ class StructuredAnalyzer:
 # Convenience Functions
 # =============================================================================
 
+
 async def analyze_keyword_structured(
     keyword: str,
     articles: list[dict[str, Any]],
@@ -557,7 +542,7 @@ async def analyze_keyword_structured(
 ) -> AnalysisResult:
     """
     단일 키워드 분석 편의 함수
-    
+
     Usage:
         result = await analyze_keyword_structured(
             keyword="트럼프 관세",
@@ -576,6 +561,7 @@ async def analyze_keyword_structured(
 # =============================================================================
 
 if __name__ == "__main__":
+
     async def main() -> None:
         """테스트 실행"""
         # 테스트용 더미 뉴스 데이터
@@ -593,7 +579,7 @@ if __name__ == "__main__":
                 "published": "2025-02-15T10:30:00",
             },
             {
-                "title": "전문가 \"무역전쟁 장기화 시 국내 GDP 0.5%p 하락 가능\"",
+                "title": '전문가 "무역전쟁 장기화 시 국내 GDP 0.5%p 하락 가능"',
                 "summary": "경제 전문가들은 미중 무역전쟁이 장기화될 경우 국내 경제에 상당한 영향을 미칠 것으로 분석했다.",
                 "source": "경제연구소",
                 "published": "2025-02-15T11:00:00",
@@ -605,18 +591,18 @@ if __name__ == "__main__":
                 "published": "2025-02-15T15:30:00",
             },
             {
-                "title": "정부 \"수출기업 지원 대책 마련 중\"",
+                "title": '정부 "수출기업 지원 대책 마련 중"',
                 "summary": "정부는 미국의 관세 정책에 대응하여 수출 기업 지원 대책을 마련 중이라고 밝혔다.",
                 "source": "정책브리핑",
                 "published": "2025-02-15T16:00:00",
             },
         ]
-        
+
         print("\n" + "=" * 70)
         print("  Week 4 Day 1: Structured Analyzer Test")
         print("  Outlines + Ollama = JSON 100% 보장")
         print("=" * 70)
-        
+
         try:
             # Outlines 모드로 테스트
             print("\n🧪 Testing with Outlines backend...")
@@ -624,42 +610,43 @@ if __name__ == "__main__":
                 keyword="트럼프 관세",
                 articles=test_articles,
             )
-            
-            print(f"\n✅ 분석 완료!")
-            print(f"\n📊 분석 결과:")
+
+            print("\n✅ 분석 완료!")
+            print("\n📊 분석 결과:")
             print(f"   키워드: {result.keyword}")
             print(f"   소스 수: {result.source_count}")
             print(f"   모델: {result.model_version}")
             print(f"   생성 방식: {result.generation_method}")
             print(f"   추론 시간: {result.inference_time_seconds:.2f}초")
-            
-            print(f"\n🔍 핵심 원인:")
+
+            print("\n🔍 핵심 원인:")
             print(f"   {result.analysis.main_cause}")
-            
-            print(f"\n📈 감성 비율:")
+
+            print("\n📈 감성 비율:")
             print(f"   긍정: {result.analysis.sentiment_ratio.positive:.0%}")
             print(f"   부정: {result.analysis.sentiment_ratio.negative:.0%}")
             print(f"   중립: {result.analysis.sentiment_ratio.neutral:.0%}")
-            
-            print(f"\n💬 핵심 의견:")
+
+            print("\n💬 핵심 의견:")
             for i, opinion in enumerate(result.analysis.key_opinions, 1):
                 print(f"   {i}. {opinion}")
-            
-            print(f"\n📄 3줄 요약:")
+
+            print("\n📄 3줄 요약:")
             for line in result.analysis.summary.split("\n"):
                 print(f"   {line}")
-            
+
             print(f"\n   유효성 검사: {'✅ 통과' if result.is_valid() else '❌ 실패'}")
-            
+
             # JSON 직렬화 테스트
-            print(f"\n📦 JSON 직렬화 테스트:")
+            print("\n📦 JSON 직렬화 테스트:")
             json_output = result.model_dump_json(indent=2)
             print(f"   크기: {len(json_output)} bytes")
-            print(f"   ✅ JSON 직렬화 성공")
-            
+            print("   ✅ JSON 직렬화 성공")
+
         except Exception as e:
             print(f"\n❌ 테스트 실패: {e}")
             import traceback
+
             traceback.print_exc()
-    
+
     asyncio.run(main())

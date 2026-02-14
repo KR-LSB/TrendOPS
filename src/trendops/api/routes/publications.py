@@ -16,7 +16,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from trendops.database.connection import get_session
 from trendops.database.models import Analysis, Keyword, Publication
 
-
 router = APIRouter()
 
 
@@ -24,8 +23,10 @@ router = APIRouter()
 # Request/Response Schemas
 # =============================================================================
 
+
 class PublicationCreate(BaseModel):
     """발행 생성 요청"""
+
     keyword_id: UUID = Field(..., description="키워드 ID")
     analysis_id: UUID = Field(..., description="분석 ID")
     platform: Literal["instagram", "threads"] = Field(..., description="플랫폼")
@@ -36,6 +37,7 @@ class PublicationCreate(BaseModel):
 
 class PublicationUpdate(BaseModel):
     """발행 수정 요청"""
+
     status: Literal["pending", "approved", "published", "failed", "rejected"] | None = None
     review_status: Literal["pending", "approved", "rejected", "modified"] | None = None
     reviewer_note: str | None = None
@@ -45,6 +47,7 @@ class PublicationUpdate(BaseModel):
 
 class PublicationResponse(BaseModel):
     """발행 응답"""
+
     id: UUID
     keyword_id: UUID
     keyword_text: str | None = None
@@ -59,13 +62,14 @@ class PublicationResponse(BaseModel):
     reviewer_note: str | None
     published_at: datetime | None
     created_at: datetime | None
-    
+
     class Config:
         from_attributes = True
 
 
 class PublicationListResponse(BaseModel):
     """발행 목록 응답"""
+
     items: list[PublicationResponse]
     total: int
     page: int
@@ -75,6 +79,7 @@ class PublicationListResponse(BaseModel):
 
 class PublicationStats(BaseModel):
     """발행 통계"""
+
     total_publications: int
     published_count: int
     pending_count: int
@@ -87,6 +92,7 @@ class PublicationStats(BaseModel):
 
 class ReviewAction(BaseModel):
     """리뷰 액션 요청"""
+
     action: Literal["approve", "reject", "modify"]
     note: str | None = Field(default=None, description="리뷰어 노트")
     modified_caption: str | None = Field(default=None, description="수정된 캡션")
@@ -94,6 +100,7 @@ class ReviewAction(BaseModel):
 
 class PublishAction(BaseModel):
     """발행 실행 결과"""
+
     post_id: str = Field(..., description="발행된 포스트 ID")
     post_url: str | None = Field(default=None, description="발행된 포스트 URL")
 
@@ -101,6 +108,7 @@ class PublishAction(BaseModel):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 async def publication_to_response(
     pub: Publication,
@@ -114,7 +122,7 @@ async def publication_to_response(
             select(Keyword.keyword).where(Keyword.id == pub.keyword_id)
         )
         keyword_text = kw_result.scalar_one_or_none()
-    
+
     return PublicationResponse(
         id=pub.id,
         keyword_id=pub.keyword_id,
@@ -137,6 +145,7 @@ async def publication_to_response(
 # Endpoints
 # =============================================================================
 
+
 @router.get(
     "/",
     response_model=PublicationListResponse,
@@ -158,52 +167,52 @@ async def list_publications(
     """발행 목록 조회"""
     query = select(Publication)
     count_query = select(func.count(Publication.id))
-    
+
     # 필터 적용
     if platform:
         query = query.where(Publication.platform == platform)
         count_query = count_query.where(Publication.platform == platform)
-    
+
     if status:
         query = query.where(Publication.status == status)
         count_query = count_query.where(Publication.status == status)
-    
+
     if review_status:
         query = query.where(Publication.review_status == review_status)
         count_query = count_query.where(Publication.review_status == review_status)
-    
+
     if keyword_id:
         query = query.where(Publication.keyword_id == keyword_id)
         count_query = count_query.where(Publication.keyword_id == keyword_id)
-    
+
     if start_date:
         query = query.where(Publication.created_at >= start_date)
         count_query = count_query.where(Publication.created_at >= start_date)
-    
+
     if end_date:
         query = query.where(Publication.created_at <= end_date)
         count_query = count_query.where(Publication.created_at <= end_date)
-    
+
     # 전체 개수
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # 정렬
     if sort_order == "desc":
         query = query.order_by(Publication.created_at.desc())
     else:
         query = query.order_by(Publication.created_at.asc())
-    
+
     # 페이지네이션
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)
-    
+
     # 실행
     result = await session.execute(query)
     publications = result.scalars().all()
-    
+
     items = [await publication_to_response(p, session) for p in publications]
-    
+
     return PublicationListResponse(
         items=items,
         total=total,
@@ -226,19 +235,15 @@ async def create_publication(
 ) -> PublicationResponse:
     """발행 생성"""
     # 키워드 확인
-    kw_result = await session.execute(
-        select(Keyword).where(Keyword.id == data.keyword_id)
-    )
+    kw_result = await session.execute(select(Keyword).where(Keyword.id == data.keyword_id))
     if not kw_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Keyword not found")
-    
+
     # 분석 확인
-    analysis_result = await session.execute(
-        select(Analysis).where(Analysis.id == data.analysis_id)
-    )
+    analysis_result = await session.execute(select(Analysis).where(Analysis.id == data.analysis_id))
     if not analysis_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="Analysis not found")
-    
+
     publication = Publication(
         keyword_id=data.keyword_id,
         analysis_id=data.analysis_id,
@@ -252,7 +257,7 @@ async def create_publication(
     session.add(publication)
     await session.flush()
     await session.refresh(publication)
-    
+
     return await publication_to_response(publication, session)
 
 
@@ -269,53 +274,50 @@ async def get_publication_stats(
     now = datetime.now()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_start = today_start - timedelta(days=7)
-    
+
     # 전체 개수
     total_result = await session.execute(select(func.count(Publication.id)))
     total = total_result.scalar() or 0
-    
+
     # 상태별 개수
     published_result = await session.execute(
         select(func.count(Publication.id)).where(Publication.status == "published")
     )
     published = published_result.scalar() or 0
-    
+
     pending_result = await session.execute(
         select(func.count(Publication.id)).where(Publication.status == "pending")
     )
     pending = pending_result.scalar() or 0
-    
+
     failed_result = await session.execute(
         select(func.count(Publication.id)).where(Publication.status == "failed")
     )
     failed = failed_result.scalar() or 0
-    
+
     rejected_result = await session.execute(
         select(func.count(Publication.id)).where(Publication.status == "rejected")
     )
     rejected = rejected_result.scalar() or 0
-    
+
     # 오늘 발행
     today_result = await session.execute(
-        select(func.count(Publication.id))
-        .where(Publication.created_at >= today_start)
+        select(func.count(Publication.id)).where(Publication.created_at >= today_start)
     )
     today_count = today_result.scalar() or 0
-    
+
     # 이번 주 발행
     week_result = await session.execute(
-        select(func.count(Publication.id))
-        .where(Publication.created_at >= week_start)
+        select(func.count(Publication.id)).where(Publication.created_at >= week_start)
     )
     week_count = week_result.scalar() or 0
-    
+
     # 플랫폼별 개수
     platform_result = await session.execute(
-        select(Publication.platform, func.count(Publication.id))
-        .group_by(Publication.platform)
+        select(Publication.platform, func.count(Publication.id)).group_by(Publication.platform)
     )
     platform_breakdown = {row[0]: row[1] for row in platform_result.all()}
-    
+
     return PublicationStats(
         total_publications=total,
         published_count=published,
@@ -346,13 +348,13 @@ async def list_pending_publications(
         .order_by(Publication.created_at.asc())
         .limit(limit)
     )
-    
+
     if platform:
         query = query.where(Publication.platform == platform)
-    
+
     result = await session.execute(query)
     publications = result.scalars().all()
-    
+
     return [await publication_to_response(p, session) for p in publications]
 
 
@@ -367,14 +369,12 @@ async def get_publication(
     session: AsyncSession = Depends(get_session),
 ) -> PublicationResponse:
     """발행 상세 조회"""
-    result = await session.execute(
-        select(Publication).where(Publication.id == publication_id)
-    )
+    result = await session.execute(select(Publication).where(Publication.id == publication_id))
     publication = result.scalar_one_or_none()
-    
+
     if not publication:
         raise HTTPException(status_code=404, detail="Publication not found")
-    
+
     return await publication_to_response(publication, session)
 
 
@@ -390,21 +390,19 @@ async def update_publication(
     session: AsyncSession = Depends(get_session),
 ) -> PublicationResponse:
     """발행 수정"""
-    result = await session.execute(
-        select(Publication).where(Publication.id == publication_id)
-    )
+    result = await session.execute(select(Publication).where(Publication.id == publication_id))
     publication = result.scalar_one_or_none()
-    
+
     if not publication:
         raise HTTPException(status_code=404, detail="Publication not found")
-    
+
     update_data = data.model_dump(exclude_unset=True)
     for field, value in update_data.items():
         setattr(publication, field, value)
-    
+
     await session.flush()
     await session.refresh(publication)
-    
+
     return await publication_to_response(publication, session)
 
 
@@ -420,20 +418,17 @@ async def review_publication(
     session: AsyncSession = Depends(get_session),
 ) -> PublicationResponse:
     """발행 리뷰 처리"""
-    result = await session.execute(
-        select(Publication).where(Publication.id == publication_id)
-    )
+    result = await session.execute(select(Publication).where(Publication.id == publication_id))
     publication = result.scalar_one_or_none()
-    
+
     if not publication:
         raise HTTPException(status_code=404, detail="Publication not found")
-    
+
     if publication.review_status != "pending":
         raise HTTPException(
-            status_code=400,
-            detail=f"Publication already reviewed: {publication.review_status}"
+            status_code=400, detail=f"Publication already reviewed: {publication.review_status}"
         )
-    
+
     if action.action == "approve":
         publication.review_status = "approved"
         publication.status = "approved"
@@ -444,12 +439,12 @@ async def review_publication(
         publication.review_status = "modified"
         if action.modified_caption:
             publication.caption = action.modified_caption
-    
+
     publication.reviewer_note = action.note
-    
+
     await session.flush()
     await session.refresh(publication)
-    
+
     return await publication_to_response(publication, session)
 
 
@@ -465,28 +460,25 @@ async def execute_publish(
     session: AsyncSession = Depends(get_session),
 ) -> PublicationResponse:
     """발행 실행 (실제 SNS 발행 후 결과 기록)"""
-    result = await session.execute(
-        select(Publication).where(Publication.id == publication_id)
-    )
+    result = await session.execute(select(Publication).where(Publication.id == publication_id))
     publication = result.scalar_one_or_none()
-    
+
     if not publication:
         raise HTTPException(status_code=404, detail="Publication not found")
-    
+
     if publication.review_status not in ("approved", "modified"):
         raise HTTPException(
-            status_code=400,
-            detail="Publication must be approved before publishing"
+            status_code=400, detail="Publication must be approved before publishing"
         )
-    
+
     publication.post_id = publish_result.post_id
     publication.post_url = publish_result.post_url
     publication.status = "published"
     publication.published_at = datetime.now()
-    
+
     await session.flush()
     await session.refresh(publication)
-    
+
     return await publication_to_response(publication, session)
 
 
@@ -502,20 +494,18 @@ async def mark_publication_failed(
     session: AsyncSession = Depends(get_session),
 ) -> PublicationResponse:
     """발행 실패 기록"""
-    result = await session.execute(
-        select(Publication).where(Publication.id == publication_id)
-    )
+    result = await session.execute(select(Publication).where(Publication.id == publication_id))
     publication = result.scalar_one_or_none()
-    
+
     if not publication:
         raise HTTPException(status_code=404, detail="Publication not found")
-    
+
     publication.status = "failed"
     publication.reviewer_note = f"Failed: {error_note}"
-    
+
     await session.flush()
     await session.refresh(publication)
-    
+
     return await publication_to_response(publication, session)
 
 
@@ -530,18 +520,13 @@ async def delete_publication(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """발행 삭제"""
-    result = await session.execute(
-        select(Publication).where(Publication.id == publication_id)
-    )
+    result = await session.execute(select(Publication).where(Publication.id == publication_id))
     publication = result.scalar_one_or_none()
-    
+
     if not publication:
         raise HTTPException(status_code=404, detail="Publication not found")
-    
+
     if publication.status == "published":
-        raise HTTPException(
-            status_code=400,
-            detail="Cannot delete published content"
-        )
-    
+        raise HTTPException(status_code=400, detail="Cannot delete published content")
+
     await session.delete(publication)

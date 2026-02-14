@@ -10,12 +10,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from trendops.database.connection import get_session
 from trendops.database.models import Keyword
-
 
 router = APIRouter()
 
@@ -24,8 +23,10 @@ router = APIRouter()
 # Request/Response Schemas
 # =============================================================================
 
+
 class KeywordCreate(BaseModel):
     """키워드 생성 요청"""
+
     keyword: str = Field(..., min_length=1, max_length=255, description="키워드 텍스트")
     source: str = Field(default="manual", max_length=50, description="소스")
     trend_score: float = Field(default=5.0, ge=0.0, le=10.0, description="트렌드 점수")
@@ -34,6 +35,7 @@ class KeywordCreate(BaseModel):
 
 class KeywordUpdate(BaseModel):
     """키워드 수정 요청"""
+
     trend_score: float | None = Field(default=None, ge=0.0, le=10.0, description="트렌드 점수")
     is_active: bool | None = Field(default=None, description="활성화 상태")
     metadata: dict | None = Field(default=None, description="추가 메타데이터")
@@ -41,6 +43,7 @@ class KeywordUpdate(BaseModel):
 
 class KeywordResponse(BaseModel):
     """키워드 응답"""
+
     id: UUID
     keyword: str
     source: str
@@ -50,13 +53,14 @@ class KeywordResponse(BaseModel):
     last_seen_at: datetime | None
     article_count: int = 0
     analysis_count: int = 0
-    
+
     class Config:
         from_attributes = True
 
 
 class KeywordListResponse(BaseModel):
     """키워드 목록 응답"""
+
     items: list[KeywordResponse]
     total: int
     page: int
@@ -66,6 +70,7 @@ class KeywordListResponse(BaseModel):
 
 class KeywordStats(BaseModel):
     """키워드 통계"""
+
     total_keywords: int
     active_keywords: int
     avg_trend_score: float
@@ -75,6 +80,7 @@ class KeywordStats(BaseModel):
 # =============================================================================
 # Helper Functions
 # =============================================================================
+
 
 def keyword_to_response(kw: Keyword) -> KeywordResponse:
     """Keyword 모델을 응답 스키마로 변환"""
@@ -94,6 +100,7 @@ def keyword_to_response(kw: Keyword) -> KeywordResponse:
 # =============================================================================
 # Endpoints
 # =============================================================================
+
 
 @router.get(
     "/",
@@ -118,43 +125,43 @@ async def list_keywords(
     # 기본 쿼리
     query = select(Keyword)
     count_query = select(func.count(Keyword.id))
-    
+
     # 필터 적용
     if active_only:
         query = query.where(Keyword.is_active == True)
         count_query = count_query.where(Keyword.is_active == True)
-    
+
     if source:
         query = query.where(Keyword.source == source)
         count_query = count_query.where(Keyword.source == source)
-    
+
     if min_score is not None:
         query = query.where(Keyword.trend_score >= min_score)
         count_query = count_query.where(Keyword.trend_score >= min_score)
-    
+
     if search:
         query = query.where(Keyword.keyword.ilike(f"%{search}%"))
         count_query = count_query.where(Keyword.keyword.ilike(f"%{search}%"))
-    
+
     # 전체 개수 조회
     total_result = await session.execute(count_query)
     total = total_result.scalar() or 0
-    
+
     # 정렬
     sort_column = getattr(Keyword, sort_by)
     if sort_order == "desc":
         query = query.order_by(sort_column.desc())
     else:
         query = query.order_by(sort_column.asc())
-    
+
     # 페이지네이션
     offset = (page - 1) * page_size
     query = query.offset(offset).limit(page_size)
-    
+
     # 실행
     result = await session.execute(query)
     keywords = result.scalars().all()
-    
+
     return KeywordListResponse(
         items=[keyword_to_response(kw) for kw in keywords],
         total=total,
@@ -186,9 +193,9 @@ async def create_keyword(
     if existing.scalar_one_or_none():
         raise HTTPException(
             status_code=409,
-            detail=f"Keyword '{data.keyword}' from source '{data.source}' already exists"
+            detail=f"Keyword '{data.keyword}' from source '{data.source}' already exists",
         )
-    
+
     # 생성
     keyword = Keyword(
         keyword=data.keyword,
@@ -199,7 +206,7 @@ async def create_keyword(
     session.add(keyword)
     await session.flush()
     await session.refresh(keyword)
-    
+
     return keyword_to_response(keyword)
 
 
@@ -216,26 +223,25 @@ async def get_keyword_stats(
     # 전체 개수
     total_result = await session.execute(select(func.count(Keyword.id)))
     total = total_result.scalar() or 0
-    
+
     # 활성 개수
     active_result = await session.execute(
         select(func.count(Keyword.id)).where(Keyword.is_active == True)
     )
     active = active_result.scalar() or 0
-    
+
     # 평균 점수
     avg_result = await session.execute(
         select(func.avg(Keyword.trend_score)).where(Keyword.is_active == True)
     )
     avg_score = avg_result.scalar() or 0.0
-    
+
     # 소스별 개수
     source_result = await session.execute(
-        select(Keyword.source, func.count(Keyword.id))
-        .group_by(Keyword.source)
+        select(Keyword.source, func.count(Keyword.id)).group_by(Keyword.source)
     )
     top_sources = {row[0]: row[1] for row in source_result.all()}
-    
+
     return KeywordStats(
         total_keywords=total,
         active_keywords=active,
@@ -255,14 +261,12 @@ async def get_keyword(
     session: AsyncSession = Depends(get_session),
 ) -> KeywordResponse:
     """키워드 상세 조회"""
-    result = await session.execute(
-        select(Keyword).where(Keyword.id == keyword_id)
-    )
+    result = await session.execute(select(Keyword).where(Keyword.id == keyword_id))
     keyword = result.scalar_one_or_none()
-    
+
     if not keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    
+
     return keyword_to_response(keyword)
 
 
@@ -278,26 +282,24 @@ async def update_keyword(
     session: AsyncSession = Depends(get_session),
 ) -> KeywordResponse:
     """키워드 수정"""
-    result = await session.execute(
-        select(Keyword).where(Keyword.id == keyword_id)
-    )
+    result = await session.execute(select(Keyword).where(Keyword.id == keyword_id))
     keyword = result.scalar_one_or_none()
-    
+
     if not keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    
+
     # 필드 업데이트
     update_data = data.model_dump(exclude_unset=True)
     if "metadata" in update_data:
         update_data["metadata_"] = update_data.pop("metadata")
-    
+
     for field, value in update_data.items():
         setattr(keyword, field, value)
-    
+
     keyword.last_seen_at = datetime.now()
     await session.flush()
     await session.refresh(keyword)
-    
+
     return keyword_to_response(keyword)
 
 
@@ -312,14 +314,12 @@ async def delete_keyword(
     session: AsyncSession = Depends(get_session),
 ) -> None:
     """키워드 비활성화 (soft delete)"""
-    result = await session.execute(
-        select(Keyword).where(Keyword.id == keyword_id)
-    )
+    result = await session.execute(select(Keyword).where(Keyword.id == keyword_id))
     keyword = result.scalar_one_or_none()
-    
+
     if not keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    
+
     keyword.is_active = False
     keyword.last_seen_at = datetime.now()
 
@@ -335,19 +335,17 @@ async def activate_keyword(
     session: AsyncSession = Depends(get_session),
 ) -> KeywordResponse:
     """키워드 재활성화"""
-    result = await session.execute(
-        select(Keyword).where(Keyword.id == keyword_id)
-    )
+    result = await session.execute(select(Keyword).where(Keyword.id == keyword_id))
     keyword = result.scalar_one_or_none()
-    
+
     if not keyword:
         raise HTTPException(status_code=404, detail="Keyword not found")
-    
+
     keyword.is_active = True
     keyword.last_seen_at = datetime.now()
     await session.flush()
     await session.refresh(keyword)
-    
+
     return keyword_to_response(keyword)
 
 
@@ -364,11 +362,8 @@ async def bulk_create_keywords(
 ) -> list[KeywordResponse]:
     """키워드 일괄 등록"""
     if len(keywords) > 100:
-        raise HTTPException(
-            status_code=400,
-            detail="Maximum 100 keywords can be created at once"
-        )
-    
+        raise HTTPException(status_code=400, detail="Maximum 100 keywords can be created at once")
+
     created = []
     for data in keywords:
         # 중복 체크
@@ -380,7 +375,7 @@ async def bulk_create_keywords(
         )
         if existing.scalar_one_or_none():
             continue  # 중복은 스킵
-        
+
         keyword = Keyword(
             keyword=data.keyword,
             source=data.source,
@@ -389,9 +384,9 @@ async def bulk_create_keywords(
         )
         session.add(keyword)
         created.append(keyword)
-    
+
     await session.flush()
     for kw in created:
         await session.refresh(kw)
-    
+
     return [keyword_to_response(kw) for kw in created]

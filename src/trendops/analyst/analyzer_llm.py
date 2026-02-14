@@ -16,7 +16,7 @@ import re
 from datetime import datetime
 from typing import Any
 
-from openai import AsyncOpenAI, APIError, APIConnectionError, RateLimitError
+from openai import APIConnectionError, APIError, AsyncOpenAI, RateLimitError
 from pydantic import BaseModel, Field, field_validator
 
 from trendops.config.settings import get_settings
@@ -29,17 +29,19 @@ logger = get_logger(__name__)
 # Pydantic Models (Blueprint Section 3: Analysis Results Schema)
 # =============================================================================
 
+
 class SentimentRatio(BaseModel):
     """감성 비율 스키마"""
+
     positive: float = Field(..., ge=0.0, le=1.0, description="긍정 비율")
     negative: float = Field(..., ge=0.0, le=1.0, description="부정 비율")
     neutral: float = Field(..., ge=0.0, le=1.0, description="중립 비율")
-    
+
     @field_validator("positive", "negative", "neutral", mode="after")
     @classmethod
     def round_ratio(cls, v: float) -> float:
         return round(v, 2)
-    
+
     def model_post_init(self, __context: Any) -> None:
         """비율 합이 1.0이 되도록 정규화"""
         total = self.positive + self.negative + self.neutral
@@ -52,61 +54,43 @@ class SentimentRatio(BaseModel):
 class AnalysisOutput(BaseModel):
     """
     LLM 분석 출력 스키마
-    
+
     Blueprint Section 6.1 참조:
     Week 4에서 Outlines/guided_decoding으로 100% JSON 보장 예정
     """
+
     main_cause: str = Field(
-        ..., 
-        min_length=10,
-        max_length=200,
-        description="이 키워드가 뜬 핵심 원인 (1문장)"
+        ..., min_length=10, max_length=200, description="이 키워드가 뜬 핵심 원인 (1문장)"
     )
-    sentiment_ratio: SentimentRatio = Field(
-        ...,
-        description="여론 감성 비율"
-    )
-    key_opinions: list[str] = Field(
-        ...,
-        min_length=3,
-        max_length=5,
-        description="핵심 의견 3-5개"
-    )
-    summary: str = Field(
-        ...,
-        min_length=50,
-        max_length=300,
-        description="3줄 요약"
-    )
-    
+    sentiment_ratio: SentimentRatio = Field(..., description="여론 감성 비율")
+    key_opinions: list[str] = Field(..., min_length=3, max_length=5, description="핵심 의견 3-5개")
+    summary: str = Field(..., min_length=50, max_length=300, description="3줄 요약")
+
     class Config:
         json_schema_extra = {
             "example": {
                 "main_cause": "트럼프 대통령의 중국산 제품 25% 관세 부과 발표로 인한 관심 급증",
-                "sentiment_ratio": {
-                    "positive": 0.15,
-                    "negative": 0.55,
-                    "neutral": 0.30
-                },
+                "sentiment_ratio": {"positive": 0.15, "negative": 0.55, "neutral": 0.30},
                 "key_opinions": [
                     "국내 수출 기업들의 피해 우려 확산",
                     "반도체·배터리 업종 주가 하락",
-                    "소비자 물가 상승 전망에 대한 불안감"
+                    "소비자 물가 상승 전망에 대한 불안감",
                 ],
-                "summary": "트럼프 대통령이 중국산 제품에 25% 관세를 부과한다고 발표했습니다.\n이에 따라 국내 수출 기업들의 피해 우려가 확산되고 있습니다.\n특히 반도체와 배터리 업종의 주가가 하락하며 시장이 불안해하고 있습니다."
+                "summary": "트럼프 대통령이 중국산 제품에 25% 관세를 부과한다고 발표했습니다.\n이에 따라 국내 수출 기업들의 피해 우려가 확산되고 있습니다.\n특히 반도체와 배터리 업종의 주가가 하락하며 시장이 불안해하고 있습니다.",
             }
         }
 
 
 class AnalysisResult(BaseModel):
     """분석 결과 전체 스키마"""
+
     keyword: str = Field(..., description="분석 대상 키워드")
     analysis: AnalysisOutput = Field(..., description="LLM 분석 결과")
     source_count: int = Field(..., ge=0, description="분석에 사용된 소스 수")
     model_version: str = Field(..., description="사용된 모델 버전")
     inference_time_seconds: float = Field(..., ge=0, description="추론 소요 시간")
     created_at: datetime = Field(default_factory=datetime.now, description="생성 시간")
-    
+
     def is_valid(self) -> bool:
         """분석 결과 유효성 검사"""
         return (
@@ -210,8 +194,10 @@ USER_PROMPT_TEMPLATE = """## 분석 대상 키워드: {keyword}
 # Retry Configuration
 # =============================================================================
 
+
 class RetryConfig(BaseModel):
     """재시도 설정"""
+
     max_attempts: int = 3
     base_delay: float = 1.0
     max_delay: float = 30.0
@@ -222,18 +208,19 @@ class RetryConfig(BaseModel):
 # LLM Analyzer
 # =============================================================================
 
+
 class LLMAnalyzer:
     """
     vLLM 기반 뉴스 분석기
-    
+
     Blueprint Week 2 핵심 컴포넌트:
     - AsyncOpenAI 클라이언트로 vLLM 서버 연동
     - 중립적 분석가 페르소나
     - JSON 구조화 출력
-    
+
     Week 4에서 Outlines 적용으로 JSON 100% 보장 예정
     """
-    
+
     def __init__(
         self,
         retry_config: RetryConfig | None = None,
@@ -245,7 +232,7 @@ class LLMAnalyzer:
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._client: AsyncOpenAI | None = None
-    
+
     @property
     def client(self) -> AsyncOpenAI:
         """AsyncOpenAI 클라이언트 (lazy initialization)"""
@@ -260,20 +247,20 @@ class LLMAnalyzer:
                 extra={
                     "base_url": self._settings.vllm_url,
                     "model": self._settings.vllm_model,
-                }
+                },
             )
         return self._client
-    
+
     def _build_context(self, articles: list[dict[str, Any]]) -> str:
         """뉴스 기사들을 컨텍스트 문자열로 변환"""
         context_parts: list[str] = []
-        
+
         for i, article in enumerate(articles, 1):
             title = article.get("title", "제목 없음")
             summary = article.get("summary", article.get("description", ""))
             source = article.get("source", "알 수 없음")
             published = article.get("published", article.get("published_at", ""))
-            
+
             part = f"[기사 {i}]\n제목: {title}"
             if summary:
                 # 요약이 너무 길면 자르기
@@ -283,54 +270,54 @@ class LLMAnalyzer:
                 part += f"\n출처: {source}"
             if published:
                 part += f"\n발행: {published}"
-            
+
             context_parts.append(part)
-        
+
         return "\n\n".join(context_parts)
-    
+
     def _parse_json_response(self, content: str) -> dict[str, Any]:
         """
         LLM 응답에서 JSON 추출 및 파싱
-        
+
         Week 4에서 Outlines 적용 시 이 함수는 불필요해짐
         """
         # JSON 코드 블록 추출 시도
-        json_match = re.search(r'```json\s*(.*?)\s*```', content, re.DOTALL)
+        json_match = re.search(r"```json\s*(.*?)\s*```", content, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
         else:
             # 코드 블록 없이 JSON만 있는 경우
-            json_match = re.search(r'\{[\s\S]*\}', content)
+            json_match = re.search(r"\{[\s\S]*\}", content)
             if json_match:
                 json_str = json_match.group(0)
             else:
                 raise ValueError("No JSON found in response")
-        
+
         # JSON 파싱
         try:
             return json.loads(json_str)
         except json.JSONDecodeError as e:
             logger.warning(f"JSON parse failed: {e}", extra={"content": content[:200]})
             raise ValueError(f"Invalid JSON: {e}")
-    
+
     async def _call_llm(
-        self, 
-        keyword: str, 
+        self,
+        keyword: str,
         context: str,
     ) -> tuple[str, float]:
         """
         vLLM 서버에 분석 요청
-        
+
         Returns:
             (response_content, inference_time_seconds)
         """
         start_time = datetime.now()
-        
+
         user_prompt = USER_PROMPT_TEMPLATE.format(
             keyword=keyword,
             context=context,
         )
-        
+
         response = await self.client.chat.completions.create(
             model=self._settings.vllm_model,
             messages=[
@@ -340,21 +327,21 @@ class LLMAnalyzer:
             temperature=self._temperature,
             max_tokens=self._max_tokens,
         )
-        
+
         inference_time = (datetime.now() - start_time).total_seconds()
         content = response.choices[0].message.content or ""
-        
+
         logger.debug(
             "LLM response received",
             extra={
                 "inference_time": inference_time,
                 "response_length": len(content),
                 "finish_reason": response.choices[0].finish_reason,
-            }
+            },
         )
-        
+
         return content, inference_time
-    
+
     async def _analyze_with_retry(
         self,
         keyword: str,
@@ -364,67 +351,66 @@ class LLMAnalyzer:
         config = self._retry_config
         last_exception: Exception | None = None
         total_inference_time = 0.0
-        
+
         for attempt in range(config.max_attempts):
             try:
                 # LLM 호출
                 content, inference_time = await self._call_llm(keyword, context)
                 total_inference_time += inference_time
-                
+
                 # JSON 파싱
                 json_data = self._parse_json_response(content)
-                
+
                 # Pydantic 검증
                 analysis = AnalysisOutput.model_validate(json_data)
-                
+
                 logger.info(
                     "Analysis completed successfully",
                     extra={
                         "keyword": keyword,
                         "attempt": attempt + 1,
                         "inference_time": total_inference_time,
-                    }
+                    },
                 )
-                
+
                 return analysis, total_inference_time
-                
+
             except (ValueError, json.JSONDecodeError) as e:
                 # JSON 파싱 실패 - 재시도
                 last_exception = e
                 logger.warning(
                     f"JSON parsing failed, attempt {attempt + 1}/{config.max_attempts}",
-                    extra={"error": str(e), "keyword": keyword}
+                    extra={"error": str(e), "keyword": keyword},
                 )
-                
+
             except (APIError, APIConnectionError) as e:
                 # API 오류 - 재시도
                 last_exception = e
                 logger.warning(
                     f"API error, attempt {attempt + 1}/{config.max_attempts}",
-                    extra={"error": str(e), "keyword": keyword}
+                    extra={"error": str(e), "keyword": keyword},
                 )
-                
+
             except RateLimitError as e:
                 # Rate limit - 더 긴 대기
                 last_exception = e
                 logger.warning(
                     f"Rate limited, attempt {attempt + 1}/{config.max_attempts}",
-                    extra={"error": str(e), "keyword": keyword}
+                    extra={"error": str(e), "keyword": keyword},
                 )
-            
+
             # 재시도 대기
             if attempt < config.max_attempts - 1:
                 delay = min(
-                    config.base_delay * (config.exponential_base ** attempt),
-                    config.max_delay
+                    config.base_delay * (config.exponential_base**attempt), config.max_delay
                 )
                 await asyncio.sleep(delay)
-        
+
         # 모든 재시도 실패
         raise RuntimeError(
             f"Analysis failed after {config.max_attempts} attempts: {last_exception}"
         )
-    
+
     async def analyze(
         self,
         keyword: str,
@@ -432,7 +418,7 @@ class LLMAnalyzer:
     ) -> AnalysisResult:
         """
         뉴스 기사들을 분석하여 요약 결과 반환
-        
+
         Args:
             keyword: 분석 대상 키워드
             articles: 뉴스 기사 목록 (dict 형태)
@@ -440,31 +426,28 @@ class LLMAnalyzer:
                 - summary/description: 기사 요약
                 - source: 출처
                 - published/published_at: 발행일
-        
+
         Returns:
             AnalysisResult: 분석 결과
-            
+
         Raises:
             RuntimeError: 분석 실패 시
             ValueError: 입력 데이터 검증 실패 시
         """
         if not articles:
             raise ValueError("No articles provided for analysis")
-        
+
         if not keyword or not keyword.strip():
             raise ValueError("Keyword cannot be empty")
-        
-        logger.info(
-            "Starting analysis",
-            extra={"keyword": keyword, "article_count": len(articles)}
-        )
-        
+
+        logger.info("Starting analysis", extra={"keyword": keyword, "article_count": len(articles)})
+
         # 컨텍스트 구성
         context = self._build_context(articles)
-        
+
         # LLM 분석 수행
         analysis, inference_time = await self._analyze_with_retry(keyword, context)
-        
+
         # 결과 구성
         result = AnalysisResult(
             keyword=keyword,
@@ -473,25 +456,25 @@ class LLMAnalyzer:
             model_version=self._settings.vllm_model,
             inference_time_seconds=inference_time,
         )
-        
+
         logger.info(
             "Analysis result created",
             extra={
                 "keyword": keyword,
                 "is_valid": result.is_valid(),
                 "inference_time": inference_time,
-            }
+            },
         )
-        
+
         return result
-    
+
     async def analyze_from_collection_result(
         self,
         collection_result: Any,  # CollectionResult 타입
     ) -> AnalysisResult:
         """
         CollectionResult 객체로부터 직접 분석 수행
-        
+
         collector_rss_google.py의 CollectionResult와 연동
         """
         # CollectionResult의 articles를 dict로 변환
@@ -504,22 +487,22 @@ class LLMAnalyzer:
             }
             for article in collection_result.articles
         ]
-        
+
         return await self.analyze(
             keyword=collection_result.keyword,
             articles=articles,
         )
-    
+
     async def close(self) -> None:
         """클라이언트 리소스 정리"""
         if self._client is not None:
             await self._client.close()
             self._client = None
             logger.info("LLM client closed")
-    
-    async def __aenter__(self) -> "LLMAnalyzer":
+
+    async def __aenter__(self) -> LLMAnalyzer:
         return self
-    
+
     async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         await self.close()
 
@@ -528,13 +511,14 @@ class LLMAnalyzer:
 # Convenience Functions
 # =============================================================================
 
+
 async def analyze_keyword(
     keyword: str,
     articles: list[dict[str, Any]],
 ) -> AnalysisResult:
     """
     단일 키워드 분석 편의 함수
-    
+
     Usage:
         result = await analyze_keyword(
             keyword="트럼프 관세",
@@ -553,6 +537,7 @@ async def analyze_keyword(
 # =============================================================================
 
 if __name__ == "__main__":
+
     async def main() -> None:
         """테스트 실행"""
         # 테스트용 더미 뉴스 데이터
@@ -570,7 +555,7 @@ if __name__ == "__main__":
                 "published": "2025-02-15T10:30:00",
             },
             {
-                "title": "전문가 \"무역전쟁 장기화 시 국내 GDP 0.5%p 하락 가능\"",
+                "title": '전문가 "무역전쟁 장기화 시 국내 GDP 0.5%p 하락 가능"',
                 "summary": "경제 전문가들은 미중 무역전쟁이 장기화될 경우 국내 경제에 상당한 영향을 미칠 것으로 분석했다.",
                 "source": "경제연구소",
                 "published": "2025-02-15T11:00:00",
@@ -582,45 +567,45 @@ if __name__ == "__main__":
                 "published": "2025-02-15T15:30:00",
             },
             {
-                "title": "정부 \"수출기업 지원 대책 마련 중\"",
+                "title": '정부 "수출기업 지원 대책 마련 중"',
                 "summary": "정부는 미국의 관세 정책에 대응하여 수출 기업 지원 대책을 마련 중이라고 밝혔다.",
                 "source": "정책브리핑",
                 "published": "2025-02-15T16:00:00",
             },
         ]
-        
+
         print("\n" + "=" * 60)
         print("  LLM Analyzer Test")
         print("=" * 60)
-        
+
         try:
             result = await analyze_keyword(
                 keyword="트럼프 관세",
                 articles=test_articles,
             )
-            
-            print(f"\n✅ 분석 완료!")
-            print(f"\n📊 분석 결과:")
+
+            print("\n✅ 분석 완료!")
+            print("\n📊 분석 결과:")
             print(f"   키워드: {result.keyword}")
             print(f"   소스 수: {result.source_count}")
             print(f"   모델: {result.model_version}")
             print(f"   추론 시간: {result.inference_time_seconds:.2f}초")
-            print(f"\n📝 핵심 원인:")
+            print("\n📝 핵심 원인:")
             print(f"   {result.analysis.main_cause}")
-            print(f"\n📈 감성 비율:")
+            print("\n📈 감성 비율:")
             print(f"   긍정: {result.analysis.sentiment_ratio.positive:.0%}")
             print(f"   부정: {result.analysis.sentiment_ratio.negative:.0%}")
             print(f"   중립: {result.analysis.sentiment_ratio.neutral:.0%}")
-            print(f"\n💬 핵심 의견:")
+            print("\n💬 핵심 의견:")
             for i, opinion in enumerate(result.analysis.key_opinions, 1):
                 print(f"   {i}. {opinion}")
-            print(f"\n📄 3줄 요약:")
+            print("\n📄 3줄 요약:")
             for line in result.analysis.summary.split("\n"):
                 print(f"   {line}")
             print(f"\n   유효성 검사: {'✅ 통과' if result.is_valid() else '❌ 실패'}")
-            
+
         except Exception as e:
             print(f"\n❌ 분석 실패: {e}")
             raise
-    
+
     asyncio.run(main())

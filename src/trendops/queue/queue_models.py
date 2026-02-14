@@ -1,7 +1,6 @@
 # src/trendops/queue/queue_models.py
 from datetime import datetime
 from enum import Enum
-from typing import Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field, HttpUrl
@@ -9,12 +8,14 @@ from pydantic import BaseModel, Field, HttpUrl
 
 class TrendSource(str, Enum):
     """트렌드 데이터 소스"""
+
     GOOGLE = "google"
     NAVER = "naver"
 
 
 class JobStatus(str, Enum):
     """Job 처리 상태"""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -23,6 +24,7 @@ class JobStatus(str, Enum):
 
 class TrendKeyword(BaseModel):
     """트렌드 키워드 스키마"""
+
     keyword: str = Field(..., min_length=1, max_length=255, description="검색 키워드")
     source: TrendSource = Field(default=TrendSource.GOOGLE, description="데이터 소스")
     trend_score: float = Field(..., ge=0.0, le=10.0, description="트렌드 점수 (0-10)")
@@ -41,6 +43,7 @@ class TrendKeyword(BaseModel):
 
 class NewsArticle(BaseModel):
     """뉴스 기사 스키마"""
+
     title: str = Field(..., min_length=1, max_length=500, description="기사 제목")
     link: HttpUrl = Field(..., description="기사 URL")
     description: str | None = Field(default=None, max_length=2000, description="기사 요약")
@@ -61,6 +64,7 @@ class NewsArticle(BaseModel):
 
 class TrendJob(BaseModel):
     """트렌드 처리 Job 스키마"""
+
     job_id: UUID = Field(default_factory=uuid4, description="고유 Job ID")
     keyword_info: TrendKeyword = Field(..., description="키워드 정보")
     status: JobStatus = Field(default=JobStatus.PENDING, description="처리 상태")
@@ -110,6 +114,7 @@ class TrendJob(BaseModel):
 
 class CollectedArticles(BaseModel):
     """수집된 기사 묶음 스키마"""
+
     keyword: str = Field(..., description="검색 키워드")
     articles: list[NewsArticle] = Field(default_factory=list, description="수집된 기사 목록")
     collected_at: datetime = Field(default_factory=datetime.now, description="수집 시간")

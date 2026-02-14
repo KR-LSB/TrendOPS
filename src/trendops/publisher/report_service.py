@@ -4,23 +4,23 @@ TrendOps Report Service
 Week 5: 분석 결과 저장 및 일일 리포트 생성
 """
 import json
-import os
-from datetime import datetime
-from pathlib import Path
-from typing import Any
 
 # 로거 설정
 import logging
+from datetime import datetime
+from pathlib import Path
+
 logger = logging.getLogger("report_service")
+
 
 class ReportService:
     """리포트 관련 기능을 담당하는 서비스 클래스"""
-    
+
     def __init__(self, base_dir: str = "data/reports"):
         self.base_dir = Path(base_dir)
-        self.log_dir = self.base_dir / "logs"      # 원본 데이터 저장 (JSONL)
+        self.log_dir = self.base_dir / "logs"  # 원본 데이터 저장 (JSONL)
         self.output_dir = self.base_dir / "daily"  # 최종 리포트 저장 (Markdown)
-        
+
         # 디렉토리 생성
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -35,14 +35,14 @@ class ReportService:
         분석 결과를 JSONL 파일에 추가 저장 (Append)
         """
         log_file = self._get_log_file()
-        
+
         # 저장할 데이터 구조
         entry = {
             "timestamp": datetime.now().isoformat(),
             "keyword": keyword,
-            "analysis": analysis_data
+            "analysis": analysis_data,
         }
-        
+
         try:
             with open(log_file, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -58,11 +58,11 @@ class ReportService:
         if not log_file.exists():
             logger.warning("No analysis logs found for today.")
             return None
-            
+
         # 1. 로그 읽기
         entries = []
         try:
-            with open(log_file, "r", encoding="utf-8") as f:
+            with open(log_file, encoding="utf-8") as f:
                 for line in f:
                     if line.strip():
                         entries.append(json.loads(line))
@@ -84,28 +84,34 @@ class ReportService:
             data = entry["analysis"]
             keyword = entry["keyword"]
             sentiment = data.get("sentiment", {})
-            
+
             # 이모지 감성
             pos = sentiment.get("positive", 0)
-            mood = "😊 긍정적" if pos > 0.6 else ("😠 부정적" if sentiment.get("negative", 0) > 0.6 else "😐 중립적")
+            mood = (
+                "😊 긍정적"
+                if pos > 0.6
+                else ("😠 부정적" if sentiment.get("negative", 0) > 0.6 else "😐 중립적")
+            )
 
             report.append(f"## {idx}. {keyword} {mood}")
             report.append(f"**핵심 원인:** {data.get('main_cause', '-')}\n")
-            
+
             report.append("### 📝 요약")
             report.append(f"{data.get('summary', '-')}\n")
-            
+
             report.append("### 💡 주요 여론")
             for op in data.get("key_opinions", [])[:3]:
                 report.append(f"- {op}")
-            
-            report.append(f"\n*(감성지수: 긍정 {int(pos*100)}% / 부정 {int(sentiment.get('negative', 0)*100)}%)*")
+
+            report.append(
+                f"\n*(감성지수: 긍정 {int(pos*100)}% / 부정 {int(sentiment.get('negative', 0)*100)}%)*"
+            )
             report.append("\n---\n")
 
         # 3. 파일 저장
         report_content = "\n".join(report)
         output_file = self.output_dir / f"Daily_Report_{datetime.now().strftime('%Y-%m-%d')}.md"
-        
+
         try:
             with open(output_file, "w", encoding="utf-8") as f:
                 f.write(report_content)

@@ -15,31 +15,31 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     """
     TrendOps 전역 설정
-    
+
     ⚠️ CRITICAL HARDWARE CONSTRAINTS (Blueprint 준수):
     - GPU (16GB): vLLM 전용 (Qwen2.5-7B-AWQ)
     - CPU: Embedding (bge-m3-korean), 전처리, 비즈니스 로직
-    
+
     모든 설정은 .env 파일에서 로드되며, 환경 변수로 오버라이드 가능
     """
-    
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
     )
-    
+
     # =========================================================================
     # DATABASE SETTINGS
     # =========================================================================
-    
+
     # Redis - Job Queue, Cache
     redis_url: str = Field(
         default="redis://localhost:6379",
         description="Redis 연결 URL (Job Queue, Rate Limit, Cache)",
     )
-    
+
     # ChromaDB - Vector Store
     chromadb_path: str = Field(
         default="./data/chromadb",
@@ -49,17 +49,17 @@ class Settings(BaseSettings):
         default="trend_documents",
         description="ChromaDB 컬렉션 이름",
     )
-    
+
     # PostgreSQL (Week 3+에서 사용)
     postgres_url: str = Field(
         default="postgresql://trendops:trendops@localhost:5432/trendops",
         description="PostgreSQL 연결 URL (분석 결과 영속화)",
     )
-    
+
     # =========================================================================
     # MODEL SETTINGS
     # =========================================================================
-    
+
     # vLLM - LLM 서빙 (GPU 전용)
     vllm_url: str = Field(
         default="http://localhost:11434",
@@ -81,7 +81,7 @@ class Settings(BaseSettings):
         le=2.0,
         description="LLM 샘플링 온도 (낮을수록 결정적)",
     )
-    
+
     # Embedding Model (CPU 전용)
     embedding_model_name: str = Field(
         default="upskyy/bge-m3-korean",
@@ -99,11 +99,11 @@ class Settings(BaseSettings):
         le=8192,
         description="임베딩 최대 시퀀스 길이",
     )
-    
+
     # =========================================================================
     # HARDWARE SETTINGS
     # =========================================================================
-    
+
     # CPU Thread 설정 (Embedding, 전처리용)
     cpu_threads: int = Field(
         default=8,
@@ -111,7 +111,7 @@ class Settings(BaseSettings):
         le=32,
         description="CPU 작업용 스레드 수 (Embedding, 전처리)",
     )
-    
+
     # GPU 설정 (vLLM 전용)
     gpu_memory_utilization: float = Field(
         default=0.90,
@@ -119,11 +119,11 @@ class Settings(BaseSettings):
         le=0.95,
         description="vLLM GPU 메모리 사용률 (단독 점유이므로 높게 설정)",
     )
-    
+
     # =========================================================================
     # COLLECTOR SETTINGS
     # =========================================================================
-    
+
     rss_timeout_seconds: int = Field(
         default=30,
         ge=5,
@@ -142,11 +142,11 @@ class Settings(BaseSettings):
         le=5.0,
         description="RSS 요청 간 딜레이 (초)",
     )
-    
+
     # =========================================================================
     # TRIGGER SETTINGS
     # =========================================================================
-    
+
     trend_min_score: float = Field(
         default=7.0,
         ge=0.0,
@@ -159,11 +159,11 @@ class Settings(BaseSettings):
         le=50,
         description="한 번에 처리할 최대 트렌드 키워드 수",
     )
-    
+
     # =========================================================================
     # ANALYST SETTINGS (Week 2)
     # =========================================================================
-    
+
     pipeline_top_k_retrieve: int = Field(
         default=5,
         ge=1,
@@ -190,22 +190,22 @@ class Settings(BaseSettings):
         le=1.0,
         description="RAG 검색 최소 유사도 임계값",
     )
-    
+
     # =========================================================================
     # DEDUPLICATION SETTINGS (Week 3)
     # =========================================================================
-    
+
     dedup_similarity_threshold: float = Field(
         default=0.95,
         ge=0.0,
         le=1.0,
         description="의미 기반 중복 제거 유사도 임계값 (95% 이상 중복 판정)",
     )
-    
+
     # =========================================================================
     # API KEYS (Week 5+에서 사용)
     # =========================================================================
-    
+
     instagram_access_token: str = Field(
         default="",
         description="Instagram Graph API 액세스 토큰",
@@ -218,20 +218,20 @@ class Settings(BaseSettings):
         default="",
         description="Google API 키 (선택적)",
     )
-    
+
     # =========================================================================
     # MONITORING SETTINGS
     # =========================================================================
-    
+
     slack_webhook_url: str = Field(
         default="",
         description="Slack 알림 웹훅 URL",
     )
-    
+
     # =========================================================================
     # ENVIRONMENT SETTINGS
     # =========================================================================
-    
+
     env: str = Field(
         default="development",
         description="실행 환경 (development | staging | production)",
@@ -244,11 +244,11 @@ class Settings(BaseSettings):
         default="./logs",
         description="로그 파일 디렉토리",
     )
-    
+
     # =========================================================================
     # VALIDATORS
     # =========================================================================
-    
+
     @field_validator("chromadb_path", "log_dir")
     @classmethod
     def ensure_directory_exists(cls, v: str) -> str:
@@ -256,7 +256,7 @@ class Settings(BaseSettings):
         path = Path(v)
         path.mkdir(parents=True, exist_ok=True)
         return str(path.resolve())
-    
+
     @field_validator("env")
     @classmethod
     def validate_env(cls, v: str) -> str:
@@ -265,7 +265,7 @@ class Settings(BaseSettings):
         if v.lower() not in allowed:
             raise ValueError(f"env must be one of {allowed}")
         return v.lower()
-    
+
     @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
@@ -274,36 +274,36 @@ class Settings(BaseSettings):
         if v.upper() not in allowed:
             raise ValueError(f"log_level must be one of {allowed}")
         return v.upper()
-    
+
     # =========================================================================
     # METHODS
     # =========================================================================
-    
+
     def get_chromadb_path(self) -> Path:
         """
         ChromaDB 저장 경로 반환 (디렉토리 자동 생성)
-        
+
         Returns:
             Path: ChromaDB 영속화 디렉토리 경로
         """
         path = Path(self.chromadb_path)
         path.mkdir(parents=True, exist_ok=True)
         return path
-    
+
     # =========================================================================
     # COMPUTED PROPERTIES
     # =========================================================================
-    
+
     @property
     def is_production(self) -> bool:
         """프로덕션 환경 여부"""
         return self.env == "production"
-    
+
     @property
     def is_development(self) -> bool:
         """개발 환경 여부"""
         return self.env == "development"
-    
+
     @property
     def vllm_api_base(self) -> str:
         """vLLM OpenAI 호환 API Base URL"""
@@ -322,7 +322,7 @@ class Settings(BaseSettings):
     def chroma_persist_path(self) -> Path:
         """
         [호환성 패치]
-        파이프라인 코드가 .mkdir()을 호출할 수 있도록 
+        파이프라인 코드가 .mkdir()을 호출할 수 있도록
         Path 객체 반환
         """
         return Path(self.chromadb_path)
@@ -330,7 +330,7 @@ class Settings(BaseSettings):
     @property
     def chroma_collection_name(self) -> str:
         """
-        [호환성 패치] 
+        [호환성 패치]
         코드(chroma_collection_name)와 설정(chromadb_collection_name) 이름 매핑
         """
         return self.chromadb_collection_name
@@ -344,17 +344,17 @@ class Settings(BaseSettings):
         return "cosine"
 
 
-@lru_cache()
+@lru_cache
 def get_settings() -> Settings:
     """
     싱글톤 패턴으로 설정 로드
-    
+
     최초 호출 시 .env 파일을 파싱하고 캐시
     이후 호출에서는 캐시된 인스턴스 반환
-    
+
     Returns:
         Settings: 전역 설정 인스턴스
-        
+
     Usage:
         from trendops.config.settings import get_settings
         settings = get_settings()
@@ -366,7 +366,7 @@ def get_settings() -> Settings:
 def clear_settings_cache() -> None:
     """
     설정 캐시 초기화 (테스트용)
-    
+
     단위 테스트에서 설정을 변경할 때 사용
     """
     get_settings.cache_clear()
